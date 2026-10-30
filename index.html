@@ -611,6 +611,7 @@ button.select{text-align:left;min-width:200px;color:var(--ink);font-weight:500}
 .hm i.today{outline:1.5px solid var(--ink);outline-offset:1px}
 .hm i.empty{visibility:hidden}
 /* stressed vowels */
+.w-ok{color:var(--ok);font-weight:700} .w-miss{color:#C26A00;font-weight:700;text-decoration:underline dotted}
 .webfoot{display:grid;gap:10px;margin-top:14px;max-width:70ch}
 .tone{font-size:14px;opacity:.75}
 .tone b{font-size:18px}
@@ -1592,16 +1593,17 @@ function roundControls(){
 function exerciseGrid(p){
   const nouns = p.filter(w => w.art === "vyr" || w.art === "mot").length;
   const dueHere = p.filter(w => isDue(w.id)).length;
-  return h("section", { class: "grid", "aria-label": "Упражнения" }, ...EXERCISES.filter(ex => !(window.WEB_STANDALONE && ex.ai)).map(ex => {
-    const noAi = ex.ai && S.sampleState === "absent";
+  return h("section", { class: "grid", "aria-label": "Упражнения" }, ...EXERCISES.filter(ex => !(window.WEB_STANDALONE && ex.ai && ex.id !== "sentence")).map(ex => {
+    const webSent = window.WEB_STANDALONE && ex.id === "sentence";
+    const noAi = ex.ai && !webSent && S.sampleState === "absent";
     const disabled = noAi || (ex.id === "article" && !nouns) || (!p.length && !(ex.id === "sentence" && modPool().length));
     const n = Math.min(S.round || p.length, p.length);
-    const tag = ex.ai ? (noAi ? "Нужен Claude" : `ИИ · ${S.level}`) : ex.id === "article" ? `сущ.: ${nouns}`
+    const tag = webSent ? "5 фраз" : ex.ai ? (noAi ? "Нужен Claude" : `ИИ · ${S.level}`) : ex.id === "article" ? `сущ.: ${nouns}`
       : ex.id === "test" ? `${n} ${plural(n, "вопрос", "вопроса", "вопросов")}` : ex.id === "memorize" ? memTag(p) : `${n} ${plW(n)}`;
     return h("button", { type: "button", class: "ex " + ex.color, disabled, onclick: () => start(ex.id) },
       h("span", { class: "tag" }, tag),
       h("h3", null, ex.t1, h("em", null, ex.t2)),
-      h("p", null, ex.desc),
+      h("p", null, webSent ? "Бытовые фразы из слов модуля. Переводишь — сверяешь с правильным вариантом." : ex.desc),
       h("span", { "aria-hidden": "true", html: `<svg class="doodle" viewBox="0 0 160 160">${DOODLES[ex.doodle]}</svg>` }));
   }));
 }
@@ -2401,7 +2403,68 @@ const LEVEL_GRAMMAR = {
   A2: "present, past and future tense; genitive, locative (kur? — name, Vilniuje), instrumental with su; sentences of 5–10 words",
   B1: "all tenses, conditional (norėčiau, jei būtų), subordinate clauses with kad / kai / kuris; sentences of 7–14 words"
 };
+/* Standalone site: translation drill from a ready-made sentence bank (data/sentences.json), self-checked with a word-by-word comparison. */
+let WEB_SENT = null;
+function viewSentenceWeb(){
+  const s = S.session, st = s.state, frag = document.createDocumentFragment();
+  const total = (s.tr && s.tr.length) || 5;
+  frag.append(h("div", { class: "bar" },
+    h("button", { type: "button", class: "round", "aria-label": "Назад к модулю", onclick: goBack }, back()),
+    h("h2", null, "Переведи ", h("em", null, "с русского")),
+    s.tr ? h("span", { class: "count" }, `${Math.min(s.i + 1, total)} / ${total}`) : null));
+  if (!WEB_SENT){
+    fetch("data/sentences.json").then(r => r.json()).then(j => { WEB_SENT = j; if (S.session === s) render(); }).catch(() => {});
+    frag.append(h("p", { class: "notice" }, "Загружаю фразы…")); return frag;
+  }
+  if (!s.tr){
+    const own = S.module && !["all", "due", "fav", "hard"].includes(S.module) ? WEB_SENT.filter(x => x.set === S.module) : WEB_SENT;
+    s.tr = shuffle(own.length ? own : WEB_SENT).slice(0, 5).map(x => Object.assign({}, x, { words: x.w.map(id => S.byId.get(id)).filter(Boolean) }));
+    s.i = 0; s.right = 0; s.wrong = 0;
+  }
+  frag.append(h("div", { class: "progress" }, h("i", { style: `width:${(s.i / total * 100).toFixed(1)}%` })));
+  if (s.i >= s.tr.length){
+    celebrate(s, s.wrong ? .5 : 1);
+    frag.append(h("div", { class: "summary" },
+      h("h3", null, "Šaunuolė!", h("em", null, `${s.right} из ${s.tr.length} — по-литовски!`)),
+      h("div", { class: "row", style: "justify-content:center;margin-top:18px" },
+        h("button", { type: "button", class: "btn ink", onclick: () => { s.tr = null; render(); } }, "Ещё 5 фраз"),
+        h("button", { type: "button", class: "btn ghost", onclick: goBack }, "Назад к модулю"))));
+    st.keys = null; return frag;
+  }
+  const it = s.tr[s.i];
+  const tok = t => fold(t).replace(/[^a-z0-9]/g, "");
+  const next = () => { s.i++; s.state = {}; render(); };
+  const rate = ok => { ok ? s.right++ : s.wrong++; if (ok) Sound.correct(); it.words.forEach(w => grade(w.id, ok)); next(); };
+  const check = () => { const v = ($("#tr-in") || {}).value || ""; st.text = v; st.checked = true; render(); if (autoSay()){ /* sentence audio is not in the bank */ } };
+  const mine = new Set((st.text || "").split(/\s+/).map(tok).filter(Boolean));
+  frag.append(h("div", { class: "stage" },
+    h("div", { class: "prompt c-pink" },
+      h("div", { class: "qtype" }, "Переведи на литовский"),
+      h("div", { class: "ru", style: "font-size:clamp(20px,3.4vw,28px)" }, it.ru),
+      st.hint || st.checked ? h("div", { class: "row", style: "justify-content:center;gap:6px;margin-top:12px;flex-wrap:wrap" },
+          ...it.words.map(w => h("span", { class: "chip", lang: "lt" }, showLt(w), " — ", firstRu(w), sayBtn(w, "w", "sm"))))
+        : h("div", { class: "row", style: "justify-content:center;margin-top:10px" },
+          h("button", { type: "button", class: "btn ghost", style: "padding:6px 14px;font-size:13px", onclick: () => { st.text = ($("#tr-in") || {}).value || ""; st.hint = true; render(); } }, "Подсказка: какие слова нужны"))),
+    h("form", { onsubmit: e => { e.preventDefault(); if (!st.checked) check(); } },
+      h("textarea", { id: "tr-in", class: "field", lang: "lt", spellcheck: "false", placeholder: "Пиши по-литовски… (Enter — проверить)", readonly: st.checked ? true : null,
+        oninput: e => { st.text = e.target.value; }, onkeydown: e => { if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); if (!st.checked) check(); } } }, st.text || ""),
+      !st.checked ? h("div", { class: "actions" },
+        h("button", { type: "button", class: "btn ghost", onclick: () => { st.text = ""; check(); } }, "Не знаю — показать"),
+        h("button", { type: "submit", class: "btn ink" }, "Проверить ", h("span", { class: "kbd" }, "Enter"))) : null),
+    st.checked ? h("div", { class: "result" },
+      h("div", null, h("div", { class: "label" }, "Как сказать"),
+        h("div", { class: "line", lang: "lt" }, ...it.lt.split(/(\s+)/).map(p => !p.trim() ? p : h("span", { class: mine.has(tok(p)) ? "w-ok" : "w-miss" }, p)))),
+      st.text && st.text.trim() ? h("p", { class: "small muted", style: "margin:0" }, "Зелёным — слова, которые у тебя совпали. Оранжевым — которых нет или они в другой форме. Порядок слов в литовском свободный, так что оцени сама:") : null,
+      h("div", { class: "actions", style: "grid-template-columns:1fr 1fr 1fr" },
+        h("button", { type: "button", class: "btn yes", onclick: () => rate(true) }, "Верно ", h("span", { class: "kbd" }, "1")),
+        h("button", { type: "button", class: "btn ghost", onclick: () => rate(true) }, "Почти ", h("span", { class: "kbd" }, "2")),
+        h("button", { type: "button", class: "btn no", onclick: () => rate(false) }, "Неверно ", h("span", { class: "kbd" }, "3")))) : null));
+  st.keys = st.checked ? { "1": () => rate(true), "2": () => rate(true), "3": () => rate(false) } : null;
+  requestAnimationFrame(() => { const f = $("#tr-in"); if (f && !st.checked){ f.focus(); f.setSelectionRange(f.value.length, f.value.length); } });
+  return frag;
+}
 function viewSentence(){
+  if (window.WEB_STANDALONE) return viewSentenceWeb();
   const s = S.session, st = s.state, frag = document.createDocumentFragment();
   const total = (s.tr && s.tr.length) || 3;
   frag.append(h("div", { class: "bar" },
