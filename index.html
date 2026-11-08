@@ -291,6 +291,7 @@ input[type="checkbox"]{width:20px;height:20px;accent-color:var(--ink)}
 @keyframes barIn{from{opacity:0;transform:translate(-50%,14px)}}
 .list{padding-bottom:84px}
 
+[hidden]{display:none!important}
 .pop{position:fixed;z-index:50;max-width:min(420px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;background:var(--ink);color:var(--sheet);border-radius:18px;padding:14px 16px;font-size:14px;box-shadow:0 12px 40px rgba(0,0,0,.25);display:grid;gap:8px}
 .pop .g{font-weight:600}
 .pop .e i{display:block;font-family:var(--serif);opacity:.75}
@@ -1024,6 +1025,9 @@ function counts(){
 function modPool(){ const m = S.module; if (!m || m === "all") return S.words; if (m === "due") return S.words.filter(w => isDue(w.id)); if (m === "fav") return S.words.filter(w => isFav(w.id)); if (m === "hard") return S.words.filter(w => isHard(w.id)); return S.words.filter(w => w.sets.includes(m)); }
 // Learned words stay out of practice until their review is due (unless the learner asks to see them).
 const needsWork = w => statusOf(w.id) !== "learned" || isDue(w.id);
+// Nothing left to do in this list today: every word is learned and none is due.
+const allKnown = list => list.length > 0 && !list.some(needsWork);
+function nextReviewIn(list){ const days = Math.max(1, Math.ceil((Math.min(...list.map(w => card(w.id).d)) - Date.now()) / DAY)); return `${days} ${plural(days, "день", "дня", "дней")}`; }
 // 24.10: practice always covers the whole module; spaced repetition only decides the order (due / least-practised first).
 function pool(){ return modPool(); }
 function pickSession(list, n = S.round){
@@ -1043,11 +1047,11 @@ function pickSession(list, n = S.round){
 
 /* ---------- persistence ---------- */
 let db = null, progRef = null, saveTimer = null, saving = false, dirty = false;
-function queueSave(){ store(LS.prog, S.progress); dirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(flush, 1200); }
+function queueSave(){ S.progress.updated = Date.now(); store(LS.prog, S.progress); dirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(flush, 1200); }
 async function flush(){
   if (saving || !dirty || !progRef) return;
   saving = true; dirty = false;
-  try { await progRef.set({ cards: S.progress.cards, picked: S.progress.picked, fav: S.progress.fav || [], order: S.progress.order || {}, seen: S.progress.seen || {}, mem: S.progress.mem || {}, recent: S.progress.recent || {}, days: S.progress.days || {}, gram: S.progress.gram || {}, fix: S.progress.fix || 0, updated: Date.now() }); }
+  try { await progRef.set({ cards: S.progress.cards, picked: S.progress.picked, fav: S.progress.fav || [], order: S.progress.order || {}, seen: S.progress.seen || {}, mem: S.progress.mem || {}, recent: S.progress.recent || {}, days: S.progress.days || {}, gram: S.progress.gram || {}, fix: S.progress.fix || 0, updated: S.progress.updated || Date.now() }); }
   catch(e){ if (e && e.code === "unavailable"){ dirty = true; setTimeout(flush, 4000 + Math.random() * 2000); } }
   finally { saving = false; if (dirty) saveTimer = setTimeout(flush, 800); }
 }
@@ -1071,7 +1075,9 @@ async function boot(){
     progRef = db.doc("data/users/" + uid + "/progress");
     try {
       const snap = await progRef.get();
-      if (snap.exists){ const d = snap.data(); S.progress = { cards: JSON.parse(JSON.stringify(d.cards || {})), picked: (d.picked || []).slice(), fav: (d.fav || []).slice(), order: JSON.parse(JSON.stringify(d.order || {})), seen: JSON.parse(JSON.stringify(d.seen || {})), mem: JSON.parse(JSON.stringify(d.mem || {})), recent: Object.assign({}, d.recent || {}), days: Object.assign({}, d.days || {}), gram: Object.assign({}, d.gram || {}), fix: d.fix || 0 }; store(LS.prog, S.progress); }
+      // A reload right after an action can beat the delayed save: then this browser's copy is the newer one and must win.
+      if (snap.exists && (S.progress.updated || 0) > (snap.data().updated || 0)){ dirty = true; flush(); }
+      else if (snap.exists){ const d = snap.data(); S.progress = { updated: d.updated || 0, cards: JSON.parse(JSON.stringify(d.cards || {})), picked: (d.picked || []).slice(), fav: (d.fav || []).slice(), order: JSON.parse(JSON.stringify(d.order || {})), seen: JSON.parse(JSON.stringify(d.seen || {})), mem: JSON.parse(JSON.stringify(d.mem || {})), recent: Object.assign({}, d.recent || {}), days: Object.assign({}, d.days || {}), gram: Object.assign({}, d.gram || {}), fix: d.fix || 0 }; store(LS.prog, S.progress); }
       else if (Object.keys(S.progress.cards).length){ dirty = true; flush(); }
     } catch(e){}
     repairBoxes();
@@ -1488,7 +1494,7 @@ function libraryEl(){
     .map(([id, ws]) => modCard(moduleInfo(id), null, id === "due" ? [h("span", null, `${ws.length} ${plW(ws.length)}`)] : null, ws));
 
   // continue: last opened modules and unfinished "einprägen" runs
-  const cont = S.sets.map(m => ({ m, t: Math.max(recentOf(m.id), (memSaved(m.id) || {}).updated || 0) })).filter(x => x.t).sort((a, b) => b.t - a.t).slice(0, 3);
+  const cont = S.sets.filter(m => !allKnown(wordsOf(m))).map(m => ({ m, t: Math.max(recentOf(m.id), (memSaved(m.id) || {}).updated || 0) })).filter(x => x.t).sort((a, b) => b.t - a.t).slice(0, 3);   // finished modules have nothing to continue
 
   const groupEl = g => {
     const isClosed = closed.has(g.id), renaming = S.ui.gRename === g.id && owner;
@@ -1587,8 +1593,8 @@ function roundControls(){
     AUDIO_ON ? "Озвучка" : null,
     AUDIO_ON ? h("span", { class: "seg", role: "group", "aria-label": "Автоозвучка слов" }, ...[[true, "Авто"], [false, "По кнопке"]].map(([v, t]) =>
       h("button", { type: "button", class: autoSay() === v ? "on" : "", "aria-pressed": String(autoSay() === v), onclick: () => { store("ww-say", v); render(); } }, t))) : null,
-    "Уровень",
-    h("span", { class: "seg", role: "group", "aria-label": "Уровень" }, ...["A1", "A2", "B1"].map(n => h("button", { type: "button", class: S.level === n ? "on" : "", onclick: () => { S.level = n; store(LS.lvl, n); render(); } }, n))));
+    window.WEB_STANDALONE ? null : "Уровень",   // the level only steers Claude's exercises, which the public site doesn't have
+    window.WEB_STANDALONE ? null : h("span", { class: "seg", role: "group", "aria-label": "Уровень" }, ...["A1", "A2", "B1"].map(n => h("button", { type: "button", class: S.level === n ? "on" : "", onclick: () => { S.level = n; store(LS.lvl, n); render(); } }, n))));
 }
 function exerciseGrid(p){
   const nouns = p.filter(w => w.art === "vyr" || w.art === "mot").length;
@@ -1638,13 +1644,16 @@ function viewModule(){
     h("span", { class: "count" }, `выучено ${learned} / ${mp.length}`)));
   frag.append(h("div", { class: "progress" }, h("i", { style: `width:${mp.length ? (learned / mp.length * 100).toFixed(1) : 0}%;background:var(--green)` })));
   frag.append(h("div", { class: "modtools" },
-    h("p", { id: "pool-summary", class: "small muted" }, m.source === "hard" ? (mp.length ? `Сюда попадают слова, в которых ты ошиблась ${HARD_IN} раза. ${HARD_OUT} правильных ответа подряд — и слово уходит.` : "Трудных слов нет — всё под контролем.") : !mp.length ? "Пока нет слов — добавь первые ниже." : !p.length ? "Все слова модуля выучены. Они вернутся, когда подойдёт срок повторения. Чтобы потренировать их сейчас, включи «Выученные: Показывать»." : (n => n ? `Ещё не тренировала: ${n} из ${mp.length} — они пойдут первыми. Все слова модуля — в списке внизу.` : `Все ${mp.length} ${plW(mp.length)} модуля ты уже тренировала. Список слов — внизу страницы.`)(mp.filter(w => !seenIn(S.module).has(w.id)).length)),
+    h("p", { id: "pool-summary", class: "small muted" }, m.source === "hard" ? (mp.length ? `Сюда попадают слова, в которых ты ошиблась ${HARD_IN} раза. ${HARD_OUT} правильных ответа подряд — и слово уходит.` : "Трудных слов нет — всё под контролем.") : !mp.length ? ({ due: "Сегодня повторять нечего. Можно идти за новыми словами.", fav: "В избранном пока пусто." }[m.source] || "Пока нет слов — добавь первые ниже.") : allKnown(mp) ? "Этот модуль выучен. Потренировать слова всё равно можно: упражнения ниже." : (n => n ? `Ещё не тренировала: ${n} из ${mp.length} — они пойдут первыми. Все слова модуля — в списке внизу.` : `Все ${mp.length} ${plW(mp.length)} модуля ты уже тренировала. Список слов — внизу страницы.`)(mp.filter(w => !seenIn(S.module).has(w.id)).length)),
     roundControls(),
-    mp.some(needsWork) ? h("div", { class: "row small muted" }, "Слова уже знакомые?",
+    m.source === "all" || !mp.length ? null : mp.some(needsWork) ? h("div", { class: "row small muted" }, "Слова уже знакомые?",
       h("button", { type: "button", class: "btn ghost", style: "padding:8px 16px;font-size:14px", onclick: () => {
-        const ids = mp.filter(needsWork).map(w => w.id), undo = markKnown(ids);   // new, in progress and due for review
+        const ids = mp.filter(needsWork).map(w => w.id), undoCards = markKnown(ids), key = memKey(), oldMem = S.progress.mem || {};   // new, in progress and due for review
+        const mem = Object.assign({}, oldMem); delete mem[key]; S.progress.mem = mem; queueSave();   // an unfinished "learn all" run has nothing left to continue
+        const undo = () => { S.progress.mem = oldMem; undoCards(); };
         renderKeep(); toast(`Отмечено как выученное: ${ids.length} ${plW(ids.length)}`, { label: "Отменить", fn: undo });
-      } }, "Я знаю все слова модуля")) : null));
+      } }, canAddTo(m) ? "Я знаю все слова модуля" : "Я знаю все эти слова"))
+      : h("p", { class: "small muted", style: "margin:0" }, `✓ В «Повторить» этих слов сейчас нет. Первые вернутся через ${nextReviewIn(mp)}.`)));
   frag.append(exerciseGrid(p));
   frag.append(h("div", { class: "section-h words-h" },
     h("h2", null, "Слова"),
@@ -1820,7 +1829,7 @@ function wordPanel(mp){
     h("div", { class: "wpanel-tools" },
       h("input", { id: "wq", class: "field", type: "search", placeholder: "Искать в модуле…", "aria-label": "Поиск слов", value: ui.wq,
         oninput: e => { ui.wq = e.target.value; clearTimeout(wordPanel.t); wordPanel.t = setTimeout(renderKeep, 200); } }),
-      h("span", { class: "seg", role: "group", "aria-label": "Status" }, ...[["", "Все"], ["new", "Новые"], ["learning", "Учу"], ["learned", "Выучено"]].map(([v, t]) =>
+      h("span", { class: "seg", role: "group", "aria-label": "Статус слов" }, ...[["", "Все"], ["new", "Новые"], ["learning", "Учу"], ["learned", "Выучено"]].map(([v, t]) =>
         h("button", { type: "button", class: ui.wf === v ? "on" : "", onclick: () => { ui.wf = v; renderKeep(); } }, t)))),
     h("div", { class: "wpanel-sort" },
       h("span", { class: "label" }, "Порядок"),
@@ -2045,8 +2054,7 @@ function viewMeaning(){
   if (s.i >= s.items.length){ frag.append(summary()); return frag; }
   const w = s.items[s.i];
   if (!s.state.opts){
-    const same = S.words.filter(x => x.id !== w.id && isNoun(x) === isNoun(w) && firstRu(x) !== firstRu(w));
-    s.state.opts = shuffle([w, ...shuffle(same).slice(0, 3)]);
+    s.state.opts = shuffle([w, ...distractors(w, 3, firstRu)]);
   }
   const done = s.state.choice != null;
   const choose = x => { if (s.state.choice != null) return; s.state.choice = x.id; const ok = x.id === w.id; if (ok) Sound.correct(); ok ? s.right++ : s.wrong++; grade(w.id, ok); render(); };
@@ -2180,7 +2188,7 @@ function questionView(q, st, onAnswer, onNext){
     const choose = x => { if (st.result != null) return; st.choice = x.id; settle(x.id === w.id); };
     wrap.append(h("div", { class: "options", role: "group", "aria-label": "Варианты ответа" }, ...q.opts.map((x, i) => h("button", {
       type: "button", class: "opt" + (done && x.id === w.id ? " right" : done && x.id === st.choice ? " wrong" : ""), disabled: done && x.id !== w.id && x.id !== st.choice ? true : null,
-      lang: q.type === "mc-de" ? null : "de", onclick: () => choose(x) }, h("span", { class: "n" }, i + 1), q.label(x)))));
+      lang: q.type === "mc-de" ? null : "lt", onclick: () => choose(x) }, h("span", { class: "n" }, i + 1), q.label(x)))));
     if (!done) wrap.append(h("div", { class: "skip-row" }, h("button", { type: "button", class: "btn ghost skip", onclick: skip }, "Не знаю ", h("span", { class: "kbd" }, "0"))));
     st.keys = done ? null : Object.assign(Object.fromEntries(q.opts.map((x, i) => [String(i + 1), () => choose(x)])), { "0": skip });
   } else if (q.type === "tf"){
@@ -2222,7 +2230,7 @@ function questionView(q, st, onAnswer, onNext){
 // fromModule: the whole module; progress is saved per module so leaving and coming back resumes it.
 function startMemorize(words, fromModule){
   S.view = "memorize"; hidePop(); S.ui.modOpen = false;
-  const key = fromModule ? memKey() : null, saved = fromModule ? memSaved() : null;
+  const key = fromModule ? memKey() : null, saved = fromModule && !allKnown(words) ? memSaved() : null;
   const s = S.session = { kind: "memorize", key, words, done: {}, miss: {}, last: {}, want: {}, round: 0, queue: [], missed: [], phase: "q", state: {}, q: null };
   words.forEach(w => s.done[w.id] = { r: false, p: false });
   if (saved){
@@ -2241,7 +2249,7 @@ function startMemorize(words, fromModule){
 const memKey = () => S.module || "all";
 function memSaved(key = memKey()){ const m = (S.progress.mem || {})[key]; return m && m.ids && m.ids.length ? m : null; }
 function memTag(p){
-  const m = memSaved(); if (!m) return `${p.length} ${plW(p.length)}`;
+  const m = allKnown(p) ? null : memSaved(); if (!m) return `${p.length} ${plW(p.length)}`;
   const has = new Set(p.map(w => w.id)), learned = Object.entries(m.done || {}).filter(([id, v]) => has.has(id) && v === "rp").length;
   return `Продолжить · ${learned} / ${p.length}`;
 }
@@ -2449,7 +2457,7 @@ function viewSentenceWeb(){
       h("textarea", { id: "tr-in", class: "field", lang: "lt", spellcheck: "false", placeholder: "Пиши по-литовски… (Enter — проверить)", readonly: st.checked ? true : null,
         oninput: e => { st.text = e.target.value; }, onkeydown: e => { if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); if (!st.checked) check(); } } }, st.text || ""),
       !st.checked ? h("div", { class: "actions" },
-        h("button", { type: "button", class: "btn ghost", onclick: () => { st.text = ""; check(); } }, "Не знаю — показать"),
+        h("button", { type: "button", class: "btn ghost", onclick: () => { const f = $("#tr-in"); if (f) f.value = ""; check(); } }, "Не знаю — показать"),
         h("button", { type: "submit", class: "btn ink" }, "Проверить ", h("span", { class: "kbd" }, "Enter"))) : null),
     st.checked ? h("div", { class: "result" },
       h("div", null, h("div", { class: "label" }, "Как сказать"),
@@ -2742,11 +2750,11 @@ function gapBody(st){
 const soften = s => s.replace(/t$/, "č").replace(/d$/, "dž");
 const harden = s => s.replace(/č$/, "t").replace(/dž$/, "d");
 function nounForms(w){
-  if (!w.art || /\s|\(/.test(w.de) || /tik dgs|nekaitomas|šauksm/.test(w.g || "")) return null;
+  if (!w.art || /\s|\(/.test(w.de) || w.de === "vėjas" || /tik dgs|nekaitomas|šauksm/.test(w.g || "")) return null;
   const parts = (w.g || "").split(/\s*·\s*/), gen = parts[1], nom = w.de, pl = ((w.g || "").match(/dgs\. (\S+)/) || [])[1] || null;
   if (!gen) return null;
   let f = null;
-  if (/as$/.test(nom) && !/ias$/.test(nom) && gen === nom.slice(0, -2) + "o"){ const s = nom.slice(0, -2); f = { gen, dat: s + "ui", acc: s + "ą", ins: s + "u", loc: s + "e" }; }
+  if (/as$/.test(nom) && !/ias$/.test(nom) && gen === nom.slice(0, -2) + "o"){ const s = nom.slice(0, -2); f = { gen, dat: s + "ui", acc: s + "ą", ins: s + "u", loc: s + (/j$/.test(s) ? "uje" : "e") }; }   // -jas: mokytojuje, pardavėjuje
   else if (/ias$/.test(nom) && gen === nom.slice(0, -2) + "o"){ const s = nom.slice(0, -2); f = { gen, dat: s + "ui", acc: s + "ą", ins: s + "u", loc: harden(nom.slice(0, -3).replace(/i$/, "")) + "yje" }; }
   else if (/(is|ys)$/.test(nom) && /io$/.test(gen) && w.art === "vyr"){ const s = gen.slice(0, -1), r = nom.slice(0, -2); f = { gen, dat: s + "ui", acc: r + "į", ins: s + "u", loc: r + "yje" }; }
   else if (/us$/.test(nom) && gen === nom.slice(0, -2) + "aus"){ const s = nom.slice(0, -2); f = { gen, dat: s + "ui", acc: s + "ų", ins: s + "umi", loc: s + "uje" }; }
@@ -2793,7 +2801,7 @@ function reflex(f){
 function verbForms(w){
   if (w.art || /\s|\(|\+/.test(w.de) || !/tis?$/.test(w.de)) return null;
   const p = (w.g || "").split(/\s*·\s*/).map(x => x.split(" ")[0]);
-  if (p.length < 3 || /^(būdv|prv|įv|sk|frazė|jst|dll|prl|jng|tar)\b/.test(p[0]) || w.de === "būti") return null;
+  if (p.length < 3 || /^(būdv|prv|įv|sk|frazė|jst|dll|prl|jng|tar)\b/.test(p[0]) || /^(būti|reikėti|skaudėti|lyti|snigti|pavykti|kainuoti)$/.test(w.de)) return null;   // no "aš lyju" / "aš reikiu"
   const refl = /tis$/.test(w.de), pres = presentOf(p[0], refl), past = pastOf(p[1], refl), fut = futureOf(p[2], refl);
   if (!pres || !past || !fut) return null;
   return { inf: w.de, refl: /tis$/.test(w.de), pres, past, fut };
