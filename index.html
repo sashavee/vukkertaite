@@ -292,6 +292,23 @@ input[type="checkbox"]{width:20px;height:20px;accent-color:var(--ink)}
 .list{padding-bottom:84px}
 
 [hidden]{display:none!important}
+.tail,.feedback b.tail{display:inline;background:var(--yellow);color:var(--on-card);border-radius:5px;padding:0 3px;font-weight:700}
+.gtarget{background:var(--yellow);color:var(--on-card);border-radius:6px;padding:0 4px}
+.gidea{background:var(--soft);border-radius:24px;padding:20px 22px;margin:0 0 16px}
+.gidea h3{margin:0 0 10px;font-size:20px}
+.gideas{margin:0 0 16px;padding-left:20px;display:grid;gap:8px;line-height:1.5}
+.gmap{display:grid;gap:2px}
+.gmap-row{display:grid;grid-template-columns:82px 1.1fr 1fr 1fr;gap:10px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line);font-size:15px}
+.gmap-q{color:var(--muted);font-weight:600;font-size:13px}
+.gmap-ru{color:var(--muted);font-size:14px}
+.gdue{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;background:color-mix(in srgb,var(--yellow) 28%,var(--sheet));border-radius:20px;padding:14px 18px;margin-bottom:6px}
+.gpairs{display:grid;gap:2px}
+.gpair{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--line);font-size:18px}
+.gtrap{background:color-mix(in srgb,var(--pink) 30%,var(--sheet));border-radius:16px;padding:12px 16px;line-height:1.5}
+.gref{margin-top:18px}
+.gref-item{margin:14px 0}
+.gref-item h3{margin:0 0 4px;font-size:16px}
+@media (max-width:600px){.gmap-row{grid-template-columns:1fr 1fr}.gmap-q{grid-column:1}.gmap-ru{grid-column:2;text-align:right}.gpair{font-size:16px}}
 .pop{position:fixed;z-index:50;max-width:min(420px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;background:var(--ink);color:var(--sheet);border-radius:18px;padding:14px 16px;font-size:14px;box-shadow:0 12px 40px rgba(0,0,0,.25);display:grid;gap:8px}
 .pop .g{font-weight:600}
 .pop .e i{display:block;font-family:var(--serif);opacity:.75}
@@ -1278,6 +1295,7 @@ function viewHome(){
         stat(c.learned, "Выучено"), stat(c.learning, "Учу"), stat(c.fresh, "Новые"), stat(c.due, "Повторить сегодня")),
       h("div", { class: "boxbar", role: "img", "aria-label": "Прогресс по ступеням повторения" },
         ...c.boxes.map((n, i) => h("i", { style: `width:${pct(n)};background:${boxColors[i]}`, title: `Ступень ${i}: ${n}` }))),
+      S.dbState === "ready" && gDueList().length ? h("button", { type: "button", class: "btn ghost", style: "padding:8px 16px;font-size:14px;margin-top:12px", onclick: () => { S.gTopic = null; go("grammar"); } }, `Грамматика: пора повторить · ${gDueList().length}`) : null,
       S.dbState === "ready" ? activityEl() : null
     )
   ));
@@ -2861,209 +2879,287 @@ const G_TOPICS = [
     table: [["окончание", "→ dgs.", "пример"], ["-as", "-ai", "namas → namai"], ["-is / -ys", "-iai", "brolis → broliai"], ["-us", "-ūs", "sūnus → sūnūs"], ["-a", "-os", "mama → mamos"], ["-ė", "-ės", "gatvė → gatvės"]],
     tip: "Есть слова только во множественном: durys, metai, pinigai, atostogos.", ex: "namas" }
 ];
-const gBest = id => ((S.progress.gram || {})[id] || 0);
-const gDone = id => gBest(id) >= 8;
-function gramWords(t){
-  const known = w => statusOf(w.id) !== "new";
-  let ws;
-  if (t.kind === "verb") ws = S.words.map(w => [w, verbForms(w)]).filter(([w, f]) => f && !!t.refl === f.refl);
-  else ws = S.words.map(w => [w, nounForms(w)]).filter(([w, f]) => f && (t.key !== "pl" || f.pl));
-  const k = ws.filter(([w]) => known(w));
-  return k.length >= 12 ? k : ws;
+/* ---------- grammar path: notice the tails → the rule → choose → write, and finished steps come back ----------
+   Sentences are hand-written. [x] marks the target word; {x} marks the tail in the demo pairs.
+   A sentence is [Russian, Lithuanian, dictionary form, optional note about where Lithuanian differs from Russian]. */
+const G_ASK = { kas: ["kas?", "кто? что?"], acc: ["ką?", "кого? что?"], gen: ["ko?", "кого? чего?"], loc: ["kur?", "где?"], ins: ["su kuo?", "с кем? чем?"], dat: ["kam?", "кому?"] };
+const G_PATH = [
+  { id: "pres", kind: "verb", tense: "pres", title: "Настоящее время", sub: "dirbu, turiu, matau", why: "смотри на форму «он/она» и меняй хвост",
+    pairs: [["я работа{ю}", "aš dirb{u}"], ["ты работа{ешь}", "tu dirb{i}"], ["он работа{ет}", "jis dirb{a}"], ["мы работа{ем}", "mes dirb{ame}"], ["вы работа{ете}", "jūs dirb{ate}"]],
+    rule: "Форма «он/она» — первая в карточке слова. По её последней букве видно семью: на -a (dirba): -u, -i, -ame, -ate. На -i (turi): -iu, -i, -ime, -ite. На -o (mato): -au, -ai, -ome, -ote.",
+    trap: "«Он» и «они» — одна форма: jis dirba, jie dirba.",
+    s: [["Я [работаю] в офисе.", "Aš [dirbu] biure.", "dirbti"], ["Ты сегодня [работаешь]?", "Ar tu šiandien [dirbi]?", "dirbti"], ["Мы [живём] в Вильнюсе.", "Mes [gyvename] Vilniuje.", "gyventi"], ["Вы [живёте] здесь?", "Ar jūs čia [gyvenate]?", "gyventi"], ["У меня [есть] собака.", "Aš [turiu] šunį.", "turėti", "«У меня есть» — по-литовски «я имею»: turiu."], ["У тебя [есть] ключи?", "Ar tu [turi] raktus?", "turėti", "«У тебя есть» — по-литовски «ты имеешь»: turi."], ["Мы [знаем] это.", "Mes tai [žinome].", "žinoti"], ["Я [знаю] ответ.", "Aš [žinau] atsakymą.", "žinoti"], ["Я [хочу] кофе.", "Aš [noriu] kavos.", "norėti"], ["Вы [хотите] чаю?", "Ar jūs [norite] arbatos?", "norėti"], ["Я [читаю] книгу.", "Aš [skaitau] knygą.", "skaityti"], ["Ты [читаешь] книгу?", "Ar tu [skaitai] knygą?", "skaityti"], ["Мы [говорим] по-литовски.", "Mes [kalbame] lietuviškai.", "kalbėti"], ["Я [говорю] медленно.", "Aš [kalbu] lėtai.", "kalbėti"], ["Я [ем] суп.", "Aš [valgau] sriubą.", "valgyti"], ["Мы [едим] дома.", "Mes [valgome] namie.", "valgyti"], ["Я [иду] домой.", "Aš [einu] namo.", "eiti"], ["Мы [идём] в парк.", "Mes [einame] į parką.", "eiti"], ["Ты [пьёшь] кофе?", "Ar tu [geri] kavą?", "gerti"], ["Я [вижу] собаку.", "Aš [matau] šunį.", "matyti"]] },
+  { id: "acc", kind: "noun", key: "acc", title: "Кого? Что?", sub: "matau mamą, turiu butą", why: "вижу, покупаю, имею кого? что? или иду куда? → ką?",
+    pairs: [["Вижу мам{у}", "Matau mam{ą}"], ["Вижу улиц{у}", "Matau gatv{ę}"], ["Вижу друг{а}", "Matau draug{ą}"], ["Вижу брат{а}", "Matau brol{į}"]],
+    rule: "Слово, на которое направлено действие, получает хвост с «носом»: -a и -as → -ą, -ė → -ę, -is и -ys → -į, -us → -ų. После į («куда») тот же хвост.",
+    trap: "«У меня есть брат» — это turiu + ką: turiu brolį.",
+    s: [["Я вижу [маму].", "Aš matau [mamą].", "mama"], ["Я вижу [друга].", "Aš matau [draugą].", "draugas"], ["У меня есть [брат].", "Aš turiu [brolį].", "brolis", "По-русски «брат» не меняется, а после turiu нужен ką?."], ["У меня есть [квартира].", "Aš turiu [butą].", "butas", "По-русски «квартира» не меняется, а после turiu нужен ką?."], ["Я покупаю [хлеб].", "Aš perku [duoną].", "duona"], ["Я пью [кофе].", "Aš geriu [kavą].", "kava"], ["Я читаю [книгу].", "Aš skaitau [knygą].", "knyga"], ["Я иду в [магазин].", "Einu į [parduotuvę].", "parduotuvė"], ["Я еду в [город].", "Važiuoju į [miestą].", "miestas"], ["Закрой [окно].", "Uždaryk [langą].", "langas"], ["Я люблю [море].", "Aš mėgstu [jūrą].", "jūra"], ["Возьми [зонт].", "Paimk [skėtį].", "skėtis"], ["Мы смотрим [фильм].", "Mes žiūrime [filmą].", "filmas"], ["Купи [сыр].", "Nupirk [sūrį].", "sūris"], ["Я готовлю [суп].", "Aš gaminu [sriubą].", "sriuba"], ["Мы идём на [рынок].", "Mes einame į [turgų].", "turgus"]] },
+  { id: "gen", kind: "noun", key: "gen", title: "Нет чего? Чей?", sub: "nėra laiko, neturiu brolio", why: "нет, не-, без, из, чей → ko?",
+    pairs: [["Нет мам{ы}", "Nėra mam{os}"], ["Нет улиц{ы}", "Nėra gatv{ės}"], ["Нет друг{а}", "Nėra draug{o}"], ["Нет брат{а}", "Nėra brol{io}"]],
+    rule: "Нет кого-то, отрицание, без, из, чей-то: -a → -os, -ė → -ės, -as → -o, -is и -ys → -io, -us → -aus. Эта форма — вторая в карточке существительного.",
+    trap: "При любом «не» ką? превращается в ko?: geriu kavą → negeriu kavos. Laukti (ждать) и ieškoti (искать) тоже требуют ko?.",
+    s: [["Здесь нет [мамы].", "Čia nėra [mamos].", "mama"], ["У меня нет [времени].", "Aš neturiu [laiko].", "laikas"], ["У меня нет [брата].", "Aš neturiu [brolio].", "brolis"], ["Нет [молока].", "Nėra [pieno].", "pienas"], ["Я не пью [кофе].", "Aš negeriu [kavos].", "kava", "По-русски винительный можно, по-литовски при «не» только ko?."], ["Я не вижу [друга].", "Aš nematau [draugo].", "draugas", "При «не» ką? превращается в ko?."], ["Я не ем [мясо].", "Aš nevalgau [mėsos].", "mėsa", "По-русски винительный, по-литовски при «не» только ko?."], ["Я иду из [магазина].", "Einu iš [parduotuvės].", "parduotuvė"], ["Чашка [чая].", "Puodelis [arbatos].", "arbata"], ["Это машина [брата].", "Tai [brolio] mašina.", "brolis"], ["Кофе без [сахара].", "Kava be [cukraus].", "cukrus"], ["Много [работы].", "Daug [darbo].", "darbas"], ["До [вечера]!", "Iki [vakaro]!", "vakaras"], ["Я жду [автобус].", "Laukiu [autobuso].", "autobusas", "По-русски винительный, а laukti требует ko?."], ["Я ищу [работу].", "Ieškau [darbo].", "darbas", "По-русски винительный, а ieškoti требует ko?."], ["У [окна].", "Prie [lango].", "langas"]] },
+  { id: "loc", kind: "noun", key: "loc", title: "Где?", sub: "parke, mokykloje", why: "где? → kur?, и предлог не нужен",
+    pairs: [["В парк{е}", "Park{e}"], ["В школ{е}", "Mokykl{oje}"], ["На улиц{е}", "Gatv{ėje}"], ["В комнат{е}", "Kambar{yje}"]],
+    rule: "Где? — один хвост и никакого предлога: -as → -e, -a → -oje, -ė → -ėje, -is и -ys → -yje, -us → -uje.",
+    trap: "«В» и «на» исчезают: в парке = parke, на работе = darbe. Но если что-то лежит сверху, нужно ant + ko?: ant stalo.",
+    s: [["Я живу в [городе].", "Aš gyvenu [mieste].", "miestas"], ["Мы в [парке].", "Mes [parke].", "parkas"], ["Молоко в [холодильнике].", "Pienas [šaldytuve].", "šaldytuvas"], ["Я работаю в [офисе].", "Aš dirbu [biure].", "biuras"], ["Дети в [школе].", "Vaikai [mokykloje].", "mokykla"], ["Я на [работе].", "Aš [darbe].", "darbas", "Русское «на» исчезает."], ["Мы на [кухне].", "Mes [virtuvėje].", "virtuvė", "Русское «на» исчезает."], ["Машина на [улице].", "Mašina [gatvėje].", "gatvė", "Русское «на» исчезает."], ["Книга в [сумке].", "Knyga [rankinėje].", "rankinė"], ["Магазин в [центре].", "Parduotuvė [centre].", "centras"], ["В [комнате] холодно.", "[Kambaryje] šalta.", "kambarys"], ["Мы в [лесу].", "Mes [miške].", "miškas"], ["Я на [рынке].", "Aš [turguje].", "turgus", "Русское «на» исчезает."], ["Собака в [машине].", "Šuo [mašinoje].", "mašina"], ["В [море] холодная вода.", "[Jūroje] šaltas vanduo.", "jūra"]] },
+  { id: "adj", kind: "adj", title: "Прилагательные", sub: "gera mama, gražų miestą", why: "смотри на род и падеж существительного",
+    pairs: [["хорош{ий} друг", "ger{as} draug{as}"], ["хорош{ая} мама", "ger{a} mam{a}"], ["красив{ый} город", "graž{us} miest{as}"], ["красив{ая} улица", "graž{i} gatv{ė}"], ["Вижу хорош{ую} маму", "Matau ger{ą} mam{ą}"], ["Вижу красив{ый} город", "Matau graž{ų} miest{ą}"]],
+    rule: "Прилагательное смотрит на существительное: тот же род и падеж. Три семьи, муж. → жен.: geras → gera, gražus → graži, didelis → didelė. На вопрос ką?: gerą, gražų и gražią, didelį и didelę.",
+    trap: "Род не всегда как в русском: sriuba (суп) и diena (день) женские, butas (квартира) мужской.",
+    s: [["Это [хороший] друг.", "Tai [geras] draugas.", "geras"], ["Это [хорошая] идея.", "Tai [gera] idėja.", "geras"], ["Вильнюс — [красивый] город.", "Vilnius yra [gražus] miestas.", "gražus"], ["Это [красивая] улица.", "Tai [graži] gatvė.", "gražus"], ["Я вижу [красивую] улицу.", "Aš matau [gražią] gatvę.", "gražus"], ["Я вижу [красивый] дом.", "Aš matau [gražų] namą.", "gražus"], ["Я покупаю [новую] книгу.", "Aš perku [naują] knygą.", "naujas"], ["Я покупаю [новый] телефон.", "Aš perku [naują] telefoną.", "naujas"], ["Это [новая] машина.", "Tai [nauja] mašina.", "naujas"], ["Очень [вкусный] суп!", "Labai [skani] sriuba!", "skanus", "Sriuba женского рода, хотя «суп» мужского."], ["Квартира [дорогая].", "Butas [brangus].", "brangus", "Butas мужского рода, хотя «квартира» женского."], ["Это [большой] город.", "Tai [didelis] miestas.", "didelis"], ["Это [большая] семья.", "Tai [didelė] šeima.", "didelis"], ["Это [старая] машина.", "Tai [sena] mašina.", "senas"], ["Сегодня [тёплый] день.", "Šiandien [šilta] diena.", "šiltas", "Diena женского рода, хотя «день» мужского."], ["Это [маленькая] комната.", "Tai [mažas] kambarys.", "mažas", "Kambarys мужского рода, хотя «комната» женского."], ["Я вижу [большой] дом.", "Aš matau [didelį] namą.", "didelis"], ["Я вижу [большую] машину.", "Aš matau [didelę] mašiną.", "didelis"]] },
+  { id: "past", kind: "verb", tense: "past", title: "Прошедшее время", sub: "dirbau, mačiau", why: "смотри на форму «он/она» в прошлом и меняй хвост",
+    pairs: [["я работал{а}", "aš dirb{au}"], ["ты работал{а}", "tu dirb{ai}"], ["мы работал{и}", "mes dirb{ome}"], ["я видел{а}", "aš mač{iau}"], ["ты видел{а}", "tu mat{ei}"], ["мы видел{и}", "mes mat{ėme}"]],
+    rule: "Форма «он/она» в прошлом — вторая в карточке глагола. Две семьи: на -o (dirbo): -au, -ai, -ome, -ote. На -ė (matė): -iau, -ei, -ėme, -ėte.",
+    trap: "Перед -iau t → č и d → dž: matė → mačiau. Род не важен: «работал» и «работала» — оба dirbau.",
+    s: [["Вчера я [работала].", "Vakar aš [dirbau].", "dirbti"], ["Вчера ты [работала]?", "Ar vakar tu [dirbai]?", "dirbti"], ["Мы [жили] в Каунасе.", "Mes [gyvenome] Kaune.", "gyventi"], ["Я [видела] этот фильм.", "Aš [mačiau] šį filmą.", "matyti"], ["Ты [видела] этот фильм?", "Ar tu [matei] šį filmą?", "matyti"], ["Я [купила] хлеб.", "Aš [pirkau] duoną.", "pirkti"], ["Мы [ели] дома.", "Mes [valgėme] namie.", "valgyti"], ["Я [ела] суп.", "Aš [valgiau] sriubą.", "valgyti"], ["Я [читала] книгу.", "Aš [skaičiau] knygą.", "skaityti"], ["Вы [читали] книгу?", "Ar jūs [skaitėte] knygą?", "skaityti"], ["Я [говорила] с мамой.", "Aš [kalbėjau] su mama.", "kalbėti"], ["Мы [говорили] по-литовски.", "Mes [kalbėjome] lietuviškai.", "kalbėti"], ["Я [шла] домой.", "Aš [ėjau] namo.", "eiti"], ["Мы [пили] чай.", "Mes [gėrėme] arbatą.", "gerti"], ["Я [пила] кофе.", "Aš [gėriau] kavą.", "gerti"], ["Я [знала] ответ.", "Aš [žinojau] atsakymą.", "žinoti"]] },
+  { id: "ins", kind: "noun", key: "ins", title: "С кем? Чем?", sub: "su mama, autobusu", why: "с кем? чем? на чём еду? → su kuo?",
+    pairs: [["С мам{ой}", "Su mam{a}"], ["С подруг{ой}", "Su draug{e}"], ["С друг{ом}", "Su draug{u}"], ["С брат{ом}", "Su brol{iu}"]],
+    rule: "С кем, чем, на чём едешь, кем работаешь: -as → -u, -a → -a, -ė → -e, -is и -ys → -iu, -us → -umi.",
+    trap: "На транспорте без предлога: на автобусе = autobusu. У слов на -a форма пишется как начальная: su mama.",
+    s: [["Я иду с [мамой].", "Einu su [mama].", "mama"], ["Я иду с [другом].", "Einu su [draugu].", "draugas"], ["Я живу с [братом].", "Gyvenu su [broliu].", "brolis"], ["Я еду на [автобусе].", "Važiuoju [autobusu].", "autobusas", "«На» исчезает, транспорт — просто kuo?."], ["Я еду на [поезде].", "Važiuoju [traukiniu].", "traukinys", "«На» исчезает, транспорт — просто kuo?."], ["Я еду на [машине].", "Važiuoju [mašina].", "mašina", "«На» исчезает, транспорт — просто kuo?."], ["Я плачу [картой].", "Moku [kortele].", "kortelė"], ["Я работаю [учительницей].", "Dirbu [mokytoja].", "mokytoja"], ["Кофе с [молоком].", "Kava su [pienu].", "pienas"], ["Чай с [сахаром].", "Arbata su [cukrumi].", "cukrus"], ["Я говорю с [врачом].", "Kalbu su [gydytoju].", "gydytojas"], ["Я иду с [подругой].", "Einu su [drauge].", "draugė"], ["Хлеб с [сыром].", "Duona su [sūriu].", "sūris"], ["Я живу с [женой].", "Gyvenu su [žmona].", "žmona"], ["Я живу с [мужем].", "Gyvenu su [vyru].", "vyras"]] },
+  { id: "dat", kind: "noun", key: "dat", title: "Кому?", sub: "skambinu mamai", why: "звоню, помогаю, даю кому? → kam?",
+    pairs: [["Звоню мам{е}", "Skambinu mam{ai}"], ["Звоню подруг{е}", "Skambinu draug{ei}"], ["Звоню друг{у}", "Skambinu draug{ui}"], ["Звоню брат{у}", "Skambinu brol{iui}"]],
+    rule: "Кому? -a → -ai, -ė → -ei, -as → -ui, -is и -ys → -iui, -us → -ui.",
+    trap: "«Мне нравится» и «мне нужно» — как в русском: man patinka, man reikia.",
+    s: [["Я звоню [маме].", "Skambinu [mamai].", "mama"], ["Я звоню [брату].", "Skambinu [broliui].", "brolis"], ["Я помогаю [другу].", "Padedu [draugui].", "draugas"], ["Я пишу [подруге].", "Rašau [draugei].", "draugė"], ["Это подарок [маме].", "Tai dovana [mamai].", "mama"], ["Дай [ребёнку] воды.", "Duok [vaikui] vandens.", "vaikas"], ["Я помогаю [соседу].", "Padedu [kaimynui].", "kaimynas"], ["Я звоню [врачу].", "Skambinu [gydytojui].", "gydytojas"], ["Я пишу [учительнице].", "Rašau [mokytojai].", "mokytoja"], ["Это подарок [жене].", "Tai dovana [žmonai].", "žmona"], ["Это подарок [мужу].", "Tai dovana [vyrui].", "vyras"], ["Дай [дочери] книгу.", "Duok [dukrai] knygą.", "dukra"], ["Я звоню [сыну].", "Skambinu [sūnui].", "sūnus"], ["Дай [другу] ключ.", "Duok [draugui] raktą.", "draugas"]] },
+  { id: "fut", kind: "verb", tense: "fut", title: "Будущее время", sub: "dirbsiu, eisime", why: "возьми форму «он/она» в будущем и добавь хвост",
+    pairs: [["я буду работать", "aš dirbs{iu}"], ["ты будешь работать", "tu dirbs{i}"], ["он будет работать", "jis dirbs"], ["мы будем работать", "mes dirbs{ime}"], ["вы будете работать", "jūs dirbs{ite}"]],
+    rule: "Форма «он/она» в будущем — третья в карточке глагола. К ней добавляется хвост: -iu, -i, -ime, -ite. Все глаголы делают это одинаково.",
+    trap: "Русское «буду» не нужно: буду работать = dirbsiu.",
+    s: [["Завтра я [буду работать].", "Rytoj aš [dirbsiu].", "dirbti"], ["Завтра ты [будешь работать]?", "Ar rytoj tu [dirbsi]?", "dirbti"], ["Мы [будем жить] здесь.", "Mes čia [gyvensime].", "gyventi"], ["Завтра я [куплю] хлеб.", "Rytoj aš [pirksiu] duoną.", "pirkti"], ["Вечером я [буду звонить] маме.", "Vakare aš [skambinsiu] mamai.", "skambinti"], ["Завтра мы [пойдём] в парк.", "Rytoj mes [eisime] į parką.", "eiti"], ["Завтра я [пойду] домой.", "Rytoj aš [eisiu] namo.", "eiti"], ["Вы завтра [придёте]?", "Ar jūs rytoj [ateisite]?", "ateiti"], ["Завтра я [буду читать] книгу.", "Rytoj aš [skaitysiu] knygą.", "skaityti"], ["Мы [будем есть] дома.", "Mes [valgysime] namie.", "valgyti"], ["Я [буду пить] кофе.", "Aš [gersiu] kavą.", "gerti"], ["Ты завтра [поедешь] в Каунас?", "Ar tu rytoj [važiuosi] į Kauną?", "važiuoti"], ["Завтра мы [поедем] в город.", "Rytoj mes [važiuosime] į miestą.", "važiuoti"], ["Завтра я [буду писать] письмо.", "Rytoj aš [rašysiu] laišką.", "rašyti"], ["Завтра я [увижу] маму.", "Rytoj aš [matysiu] mamą.", "matyti"]] },
+  { id: "pl", kind: "pl", key: "pl", title: "Много: множественное число", sub: "vaikai, knygos", why: "их много и это подлежащее → форма dgs. из карточки",
+    pairs: [["друг → друзь{я}", "draug{as} → draug{ai}"], ["брат → брать{я}", "brol{is} → brol{iai}"], ["книг{а} → книг{и}", "knyg{a} → knyg{os}"], ["улиц{а} → улиц{ы}", "gatv{ė} → gatv{ės}"]],
+    rule: "Кто? что? во множественном: -as → -ai, -is и -ys → -iai, -a → -os, -ė → -ės, -us → -ūs. Эта форма стоит в карточке после dgs.",
+    trap: "Некоторые слова бывают только во множественном: durys (дверь), pinigai (деньги), atostogos (отпуск).",
+    s: [["Здесь [дети].", "Čia [vaikai].", "vaikas"], ["[Друзья] здесь.", "[Draugai] čia.", "draugas"], ["[Братья] дома.", "[Broliai] namie.", "brolis"], ["Здесь [улицы].", "Čia [gatvės].", "gatvė"], ["[Книги] на столе.", "[Knygos] ant stalo.", "knyga"], ["В квартире две [комнаты].", "Bute yra du [kambariai].", "kambarys"], ["Где мои [ключи]?", "Kur mano [raktai]?", "raktas"], ["Где [билеты]?", "Kur [bilietai]?", "bilietas"], ["Где [машины]?", "Kur [mašinos]?", "mašina"], ["Здесь два [города].", "Čia du [miestai].", "miestas"], ["Здесь [врачи].", "Čia [gydytojai].", "gydytojas"], ["[Кошки] спят.", "[Katės] miega.", "katė"], ["Здесь два [окна].", "Čia du [langai].", "langas"], ["[Соседи] дома.", "[Kaimynai] namie.", "kaimynas"], ["Где [магазины]?", "Kur [parduotuvės]?", "parduotuvė"]] }
+];
+const G_PASS = 9, G_LEN = 12, G_INTERVALS = [1, 3, 7, 16, 35];
+function gState(id){ const v = (S.progress.gram || {})[id]; return v && typeof v === "object" ? v : {}; }
+function gPatch(id, patch){ S.progress.gram = Object.assign({}, S.progress.gram || {}, { [id]: Object.assign({}, gState(id), patch) }); queueSave(); }
+const gDone = id => gState(id).b != null;
+const gDue = id => gDone(id) && gState(id).d <= Date.now();
+const gDueList = () => G_PATH.filter(L => gDue(L.id));
+// A passed step comes back after 1, 3, 7, 16, 35 days; a failed review comes back tomorrow.
+function gRecord(id, ok, score){
+  const g = gState(id), now = Date.now(), best = Math.max(g.best || 0, score || 0);
+  if (ok){
+    if (g.b == null) gPatch(id, { b: 0, d: now + G_INTERVALS[0] * DAY, best });
+    else if (g.d <= now){ const b = Math.min(g.b + 1, G_INTERVALS.length - 1); gPatch(id, { b, d: now + G_INTERVALS[b] * DAY, best }); }
+    else gPatch(id, { best });
+  } else if (g.b != null) gPatch(id, { b: Math.max(0, g.b - 1), d: now + DAY, best });
+  else gPatch(id, { best });
 }
-// Template sentences: the gap (___) is where the form goes; "why" points at the word that triggers the case / tense.
-const G_CTX = {
-  acc: [["Aš matau ___.", "Я вижу …", "matau — кого? что? → ką?"], ["Ar tu turi ___?", "У тебя есть …?", "turėti — что? → ką?"], ["Šiandien perku ___.", "Сегодня покупаю …", "perku — что? → ką?"]],
-  gen: [["Aš neturiu ___.", "У меня нет …", "отрицание (ne-) — вместо ką? ставим ko?"], ["Čia nėra ___.", "Здесь нет …", "после nėra — всегда ko?"], ["Grįžtu namo be ___.", "Возвращаюсь домой без …", "be (без) → ko?"]],
-  loc: [["Ar tu buvai ___?", "Ты была в …?", "где? → kur? — местный, без предлога"], ["Susitinkame ___.", "Встречаемся в …", "где? → kur? — местный, без предлога"], ["Kas yra ___?", "Что там в …?", "где? внутри чего? → kur?"]],
-  ins: [["Aš einu su ___.", "Я иду с …", "su (с) → kuo?"], ["Kalbu su ___.", "Говорю с …", "su (с) → kuo?"], ["Mes džiaugiamės ___.", "Мы радуемся …", "džiaugtis — чем? → kuo?"]],
-  dat: [["Aš skambinu ___.", "Я звоню …", "skambinti — кому? → kam?"], ["Ar tu padedi ___?", "Ты помогаешь …?", "padėti — кому? → kam?"], ["Tai dovana ___.", "Это подарок для …", "подарок кому? → kam?"]],
-  pl: [["Čia yra du ___.", "Здесь два …", "du / trys + именительный множественного"], ["Mano ___ čia.", "Мои … здесь.", "их много и они — подлежащее → kas? (dgs.)"], ["Kur yra ___?", "Где …? (много)", "много, и это подлежащее → kas? (dgs.)"]]
-};
-const G_TIME = { pres: [["Dabar", "Сейчас"], ["Kasdien", "Каждый день"]], past: [["Vakar", "Вчера"], ["Pernai", "В прошлом году"]], fut: [["Rytoj", "Завтра"], ["Kitą savaitę", "На следующей неделе"]] };
-const G_TIME_WHY = { pres: "сейчас / регулярно → настоящее время", past: "это уже было → прошедшее время", fut: "это ещё будет → будущее время" };
-const PRON = [["aš", "я"], ["tu", "ты"], null, ["mes", "мы"], ["jūs", "вы"], null];
-function templateCtx(t, q){
-  if (t.kind === "verb"){
-    const [tl, tr] = pick(G_TIME[q.tense]);
-    const p = PRON[q.i] || (q.i === 2 ? pick([["jis", "он"], ["ji", "она"]]) : pick([["jie", "они"], ["jos", "они"]]));
-    return { lt: `${tl} ${p[0]} ___.`, ru: `${tr} ${p[1]} …`, why: G_TIME_WHY[q.tense] };
+function adjForms(de){
+  if (/us$/.test(de)){ const s = de.slice(0, -2); return { nomM: de, nomF: s + "i", accM: s + "ų", accF: s + "ią" }; }
+  if (/is$/.test(de)){ const s = de.slice(0, -2); return { nomM: de, nomF: s + "ė", accM: s + "į", accF: s + "ę" }; }
+  if (/as$/.test(de)){ const s = de.slice(0, -2); return { nomM: de, nomF: s + "a", accM: s + "ą", accF: s + "ą" }; }
+  return null;
+}
+const gramTarget = t => (t.match(/\[(.+?)\]/) || [])[1] || "";
+const gramWord = (L, base) => S.words.find(w => w.de === base && (L.kind === "verb" ? !w.art && verbForms(w) : L.kind === "adj" ? !w.art : !!w.art));
+// All forms of the word this lesson could confuse it with (the right one is removed by the caller).
+function gramPool(L, w){
+  if (L.kind === "verb"){ const f = verbForms(w); return f ? [...f[L.tense], ...["pres", "past", "fut"].filter(t => t !== L.tense).flatMap(t => f[t])] : []; }
+  if (L.kind === "adj"){ const f = adjForms(w.de); return f ? Object.values(f) : []; }
+  const f = nounForms(w); if (!f) return [];
+  return [f.acc, f.gen, f.dat, f.ins, f.loc, f.nom, ...(f.pl ? [f.pl] : [])];
+}
+function gramTask(L, sent, type){
+  const [ru, lt, base, note] = sent, answer = gramTarget(lt).toLowerCase(), w = gramWord(L, base);
+  const others = [...new Set(gramPool(L, w).filter(x => norm(x) !== norm(answer)))];
+  const task = { L, w, ru, lt, base, note, answer, type, others, stem: gramStem(L, w) };
+  // Same person of the same tense first: a verb's nearest mistake is the wrong ending, not the wrong tense.
+  const near = L.kind === "verb" ? others.filter(x => verbForms(w)[L.tense].includes(x)) : others;
+  task.opts = shuffle([answer, shuffle(near.length ? near : others)[0]]);
+  if (type === "case"){
+    const here = G_PATH.slice(0, G_PATH.indexOf(L) + 1).filter(x => x.kind === "noun" && x.key !== L.key).map(x => x.key);
+    const rest = here.length ? shuffle(here).slice(0, 2) : ["kas"];
+    task.cases = shuffle([L.key, ...rest]);
   }
-  const [lt, ru, why] = pick(G_CTX[t.key]);
-  return { lt, ru, why };
+  return task;
+}
+const gramTypes = L => L.kind === "noun" ? ["case", "tail", "type"] : ["tail", "tail", "type"];
+// Picks n sentences for a lesson without repeating until the bank runs out.
+function gramPick(L, n){ const out = []; let bag = []; while (out.length < n){ if (!bag.length) bag = shuffle(L.s); out.push(bag.pop()); } return out; }
+// A lesson: choose first, write last. Every fourth task is a step already passed, so old forms stay alive.
+function gramLessonTasks(L){
+  const old = G_PATH.slice(0, G_PATH.indexOf(L)).filter(x => gDone(x.id));
+  const stages = L.kind === "noun" ? [["case", 4], ["tail", 4], ["type", 4]] : [["tail", 6], ["type", 6]];
+  const sents = gramPick(L, G_LEN);
+  const types = stages.flatMap(([t, n]) => Array(n).fill(t));
+  return types.map((t, i) => {
+    if (old.length && i % 4 === 3){ const X = pick(old), tx = t === "case" && X.kind !== "noun" ? "tail" : t; return gramTask(X, gramPick(X, 1)[0], tx); }
+    return gramTask(L, sents[i], t);
+  });
+}
+function gramMixedTasks(list){
+  const tasks = [];
+  for (let i = 0; i < G_LEN; i++){ const L = list[i % list.length], ty = gramTypes(L); tasks.push(gramTask(L, gramPick(L, 1)[0], ty[i % ty.length])); }
+  return shuffle(tasks);
 }
 const pick = a => a[Math.random() * a.length | 0];
-// Which row/column of the topic table this exact question is about (null = the word is not regular for this table).
-function gramHl(t, q){
-  if (t.kind === "noun"){
-    const nom = q.f.nom, r = /as$/.test(nom) ? 1 : /(is|ys)$/.test(nom) ? 2 : /us$/.test(nom) ? 3 : /a$/.test(nom) ? 4 : /ė$/.test(nom) ? 5 : 0;
-    if (!r) return null;
-    const cut = r <= 3 ? 2 : 1, end = t.table[r][1].replace(/^-/, "");
-    return nom.slice(0, -cut) + end === q.answer ? { r, c: 1 } : null;
-  }
-  let p3 = q.f[q.tense][2];
-  if (t.refl) p3 = p3.replace(/si$|is$/, "");
-  const cols = t.id === "pres" ? [/a$/, /i$/, /o$/] : t.id === "refl" ? [/a$/, /o$/, /i$/] : t.id === "past" ? [/o$/, /ė$/] : [/s$/, /[šž]$/];
-  const c = cols.findIndex(re => re.test(p3)) + 1;
-  if (!c) return null;
-  const r = q.i + 1, end = (t.table[r][c] || "").replace(/^-/, "");
-  return end && q.answer.endsWith(end) ? { r, c } : null;
+function startGram(L){
+  S.view = "gdrill"; hidePop();
+  S.session = { kind: "gdrill", lesson: L, tasks: gramLessonTasks(L), i: 0, right: 0, wrong: 0, misses: [], state: {} };
+  render(); window.scrollTo({ top: 0, behavior: "smooth" });
 }
-function gramQuestion(t){
-  const [w, f] = shuffle(gramWords(t))[0];
-  let q;
-  if (t.kind === "verb"){
-    // the он/она forms are shown in the task, so ask only persons whose form differs from them
-    const i = [0, 1, 3, 4][Math.random() * 4 | 0];
-    q = { w, f, i, answer: f[t.tense][i], ask: PERSONS[i][0], askRu: PERSONS[i][1], tense: t.tense };
-  } else q = { w, f, answer: f[t.key], ask: CASES[t.key][1], askRu: CASES[t.key][0] };
-  q.ctx = templateCtx(t, q);
-  q.hl = gramHl(t, q);
-  return q;
-}
-// Ask Claude for natural sentences for the whole drill; they replace the templates for questions not shown yet.
-async function enrichGram(s){
-  if (!S.sample || S.sampleState !== "ready") return;
-  const t = s.topic;
-  const list = s.qs.map((q, n) => t.kind === "verb"
-    ? `${n + 1}. ${q.w.de} (${firstRu(q.w)}) → «${q.answer}» — ${q.askRu}, ${TENSES[q.tense]}`
-    : `${n + 1}. ${q.f.nom} (${firstRu(q.w)}) → «${q.answer}» — ${CASES[t.key][0]} (${CASES[t.key][1]})`).join("\n");
-  const prompt = `You write grammar practice for a Russian-speaking woman learning Lithuanian (level A2).
-For EACH item write one short, natural everyday Lithuanian sentence (4–9 words) where the given form appears exactly once, replaced by "___".
-The sentence must make the grammar choice obvious from context:
-${t.kind === "verb"
-  ? "- use the given person as the subject (the pronoun, or a matching noun for he/she/they) and a time word that signals the tense (dabar, kasdien, vakar, pernai, rytoj, kitą savaitę …);"
-  : `- include the word that triggers the case (${t.key === "gen" ? "negation, nėra, be, iš, daug, kiek, possession…" : t.key === "acc" ? "a transitive verb like matyti, turėti, pirkti, mylėti, or į + direction" : t.key === "loc" ? "a 'where?' context, no preposition" : t.key === "ins" ? "su, or 'by means of / as whom'" : t.key === "dat" ? "a verb like duoti, skambinti, padėti, rašyti, or man patinka / reikia-type constructions" : "a plural subject (du, trys, mano, visi…)"});`}
-- the gap must take EXACTLY the given form, nothing else;
-- do not use the given word anywhere else in the sentence; use only simple common words; if "aš" speaks about herself, use female forms.
-Items:
-${list}
-Reply with only JSON: {"items":[{"n":1,"lt":"Lithuanian sentence with ___","ru":"natural Russian translation with … in place of the word","why":"very short Russian explanation pointing at the trigger in THIS sentence, e.g. «neturiu — отрицание → ko?» or «vakar → прошедшее»"}]}`;
-  try {
-    const r = await S.sample.json(prompt, { cache: false });
-    const items = r && Array.isArray(r.items) ? r.items : [];
-    for (const x of items){
-      const n = Number(x && x.n) - 1, q = s.qs[n];
-      // only questions not shown yet, so the task on screen never changes under her
-      if (!q || !x.lt || !x.ru || S.session !== s || n <= s.i) continue;
-      const lt = String(x.lt);
-      if (lt.split("___").length !== 2 || fold(lt).includes(fold(q.answer))) continue;
-      q.ctx = { lt, ru: String(x.ru), why: String(x.why || q.ctx.why), ai: true };
-    }
-  } catch(e){ if (e && (e.code === "not_granted" || e.code === "sampling_disabled")) S.sampleState = "absent"; }
+function startGramMix(){
+  const list = gDueList(); if (!list.length) return;
+  S.view = "gdrill"; hidePop();
+  S.session = { kind: "gdrill", lesson: null, mixed: list.map(L => L.id), tasks: gramMixedTasks(list), i: 0, right: 0, wrong: 0, misses: [], state: {}, tally: {} };
+  render(); window.scrollTo({ top: 0, behavior: "smooth" });
 }
 function gramTable(rows, hl){
   return h("div", { class: "gtable-wrap" }, h("table", { class: "gtable" }, ...rows.map((r, i) => h("tr", { class: hl && hl.r === i ? "hl" : null }, ...r.map((c, j) => h(i ? "td" : "th", { lang: "lt", class: hl && hl.r === i && hl.c === j ? "hl" : null }, c))))));
 }
-function gramWhy(t, q){
-  const hl = q.hl, lines = [];
-  if (t.kind === "noun"){
-    const row = hl && t.table[hl.r];
-    lines.push(row
-      ? h("p", null, h("b", { lang: "lt" }, q.f.nom), ` оканчивается на ${row[0]} → ${t.table[0][1].replace("→ ", "")} ${row[1]}: `, h("b", { lang: "lt" }, q.answer))
-      : h("p", null, h("b", { lang: "lt" }, q.f.nom), " меняется не совсем по таблице — запомни это слово отдельно: ", h("b", { lang: "lt" }, q.answer)));
-  } else {
-    const p3 = q.f[q.tense][2];
-    lines.push(hl
-      ? h("p", null, "Он/она — ", h("b", { lang: "lt" }, p3), `, значит группа ${t.table[0][hl.c].replace(/\s*\(.*\)/, "")}. Для «${t.table[hl.r][0]}» окончание ${t.table[hl.r][hl.c]}: `, h("b", { lang: "lt" }, q.answer))
-      : h("p", null, "Он/она — ", h("b", { lang: "lt" }, p3), ". Эта форма немного отходит от таблицы: ", h("b", { lang: "lt" }, q.answer)));
-  }
-  if (q.ctx && q.ctx.why) lines.push(h("p", { class: "muted" }, "Почему так: ", q.ctx.why));
-  return h("div", { class: "why" }, ...lines);
+// "mam{ą}" → text with a highlighted tail.
+function gramTails(text, lang){
+  return h("span", { lang: lang || null }, ...text.split(/(\{.*?\})/).filter(Boolean).map(p => /^\{/.test(p) ? h("b", { class: "tail" }, p.slice(1, -1)) : p));
 }
-function formsTable(t, f){
-  if (t.kind === "verb") return gramTable([["", "сейчас", "раньше", "потом"], ...PERSONS.map(([p], i) => [p, f.pres[i], f.past[i], f.fut[i]])]);
-  return gramTable([["kas?", f.nom], ["ko?", f.gen], ["kam?", f.dat], ["ką?", f.acc], ["kuo?", f.ins], ["kur?", f.loc], ["dgs.", f.pl || "—"]]);
+// Splits a form from its dictionary form: the shared start is the stem, the rest is the tail.
+function gramSplit(form, stem){ let i = 0; while (i < form.length && i < stem.length && form[i] === stem[i]) i++; if (i === form.length) i = Math.max(0, form.length - 1); return [form.slice(0, i), form.slice(i)]; }
+function gramForm(form, stem){ const [a, b] = gramSplit(form, stem); return h("span", { lang: "lt" }, a, h("b", { class: "tail" }, b)); }
+// The unchanging part: for names the word without its ending, for verbs the он/она form without its family letter (the future keeps it whole).
+function gramStem(L, w){
+  if (L.kind === "verb"){ const p3 = verbForms(w)[L.tense][2]; return L.tense === "fut" ? p3 : p3.replace(/ia$|[aioė]$/, ""); }
+  return w.de.replace(/(ias|as|is|ys|us|ia|a|ė)$/, "");
 }
+// Sentence with its [target]: shown, blanked or filled.
+function gramSent(text, mode, base){
+  const m = text.match(/^(.*?)\[(.+?)\](.*)$/); if (!m) return text;
+  if (mode === "mark") return [m[1], h("mark", { class: "gtarget" }, m[2]), m[3]];
+  if (mode === "blank") return [m[1], h("span", { class: "blank", "aria-label": "пропуск" }), m[3]];
+  return [m[1], h("span", { class: "blank filled" }, base ? gramForm(m[2], base) : m[2]), m[3]];
+}
+function gramMap(){
+  const row = (q, ru, a, b) => h("div", { class: "gmap-row" }, h("span", { class: "gmap-q" }, q), h("span", { class: "gmap-ru" }, ru), gramTails(a, "lt"), gramTails(b, "lt"));
+  return h("div", { class: "gidea" },
+    h("h3", null, "Как это устроено"),
+    h("ol", { class: "gideas" },
+      h("li", null, h("b", null, "Слово = основа + хвост. "), "Основа не меняется, а хвост показывает роль слова. Это та же логика, что в русском."),
+      h("li", null, h("b", null, "Прилагательное повторяет за существительным. "), "Род и падеж те же: ", gramTails("ger{a} mam{a}", "lt"), ", ", gramTails("ger{as} draug{as}", "lt"), "."),
+      h("li", null, h("b", null, "Глагол строится от формы «он/она». "), "Она есть в карточке слова. Меняешь только хвост: ", gramTails("dirb{a} → dirb{u}", "lt"), ".")),
+    h("div", { class: "gmap", role: "group", "aria-label": "Хвосты на примере двух слов" },
+      row("кто?", "Мама, друг здесь", "Mam{a} čia", "Draug{as} čia"),
+      row("кого?", "Вижу маму, друга", "Matau mam{ą}", "Matau draug{ą}"),
+      row("чего нет?", "Нет мамы, друга", "Nėra mam{os}", "Nėra draug{o}"),
+      row("кому?", "Звоню маме, другу", "Skambinu mam{ai}", "Skambinu draug{ui}"),
+      row("с кем?", "С мамой, с другом", "Su mam{a}", "Su draug{u}"),
+      row("где?", "В школе, в парке", "Mokykl{oje}", "Park{e}")));
+}
+function gramHint(L){ const g = gState(L.id); if (g.b == null) return ""; const days = Math.ceil((g.d - Date.now()) / DAY); return days <= 0 ? "пора повторить" : `повтор через ${days} ${plural(days, "день", "дня", "дней")}`; }
 function viewGrammar(){
-  const frag = document.createDocumentFragment(), t = G_TOPICS.find(x => x.id === S.gTopic);
-  if (!t){
-    const next = G_TOPICS.find(x => !gDone(x.id));
+  const frag = document.createDocumentFragment(), L = G_PATH.find(x => x.id === S.gTopic);
+  if (!L){
+    const next = G_PATH.find(x => !gDone(x.id)), due = gDueList();
     frag.append(h("div", { class: "bar" }, h("h2", null, "Грамматика ", h("em", null, "шаг за шагом")),
-      h("span", { class: "count" }, `пройдено ${G_TOPICS.filter(x => gDone(x.id)).length} / ${G_TOPICS.length}`)));
-    frag.append(h("p", { class: "small muted", style: "margin:0 0 16px" }, "Иди по порядку: шаг считается пройденным, когда в тренировке 8 из 10 правильных. Слова берутся из тех, что ты уже учила."));
-    frag.append(h("div", { class: "gsteps" }, ...G_TOPICS.map((x, i) => h("button", { type: "button", class: "gstep" + (gDone(x.id) ? " done" : "") + (next && next.id === x.id ? " next" : ""), onclick: () => { S.gTopic = x.id; go("grammar"); } },
+      h("span", { class: "count" }, `пройдено ${G_PATH.filter(x => gDone(x.id)).length} / ${G_PATH.length}`)));
+    frag.append(gramMap());
+    if (due.length) frag.append(h("div", { class: "gdue" }, h("div", null, h("b", null, "Пора повторить"), h("span", { class: "small" }, " " + due.map(x => x.title).join(", "))),
+      h("button", { type: "button", class: "btn ink", onclick: startGramMix }, `Вперемешку · ${G_LEN} заданий`)));
+    frag.append(h("p", { class: "small muted", style: "margin:18px 0 12px" }, `Иди по порядку. Шаг пройден при ${G_PASS} из ${G_LEN}, потом он сам вернётся на повторение.`));
+    frag.append(h("div", { class: "gsteps" }, ...G_PATH.map((x, i) => h("button", { type: "button", class: "gstep" + (gDone(x.id) ? " done" : "") + (next && next.id === x.id ? " next" : ""), onclick: () => { S.gTopic = x.id; S.ui.gRule = false; go("grammar"); } },
       h("span", { class: "gnum" }, gDone(x.id) ? "✓" : i + 1),
       h("span", { class: "gtxt" }, h("b", null, x.title), h("span", { lang: "lt" }, x.sub)),
-      h("span", { class: "gscore" }, gBest(x.id) ? `${gBest(x.id)}/10` : next && next.id === x.id ? "следующий" : "")))));
+      h("span", { class: "gscore" }, gramHint(x) || (next && next.id === x.id ? "следующий" : ""))))));
+    frag.append(h("details", { class: "gex gref" }, h("summary", null, "Таблицы окончаний: справочник"),
+      ...G_TOPICS.map(t => h("div", { class: "gref-item" }, h("h3", null, t.title), h("p", { class: "small muted" }, t.rule), gramTable(t.table)))));
     return frag;
   }
-  const exW = S.words.find(w => w.de === t.ex), exF = exW && (t.kind === "verb" ? verbForms(exW) : nounForms(exW));
+  const open = S.ui.gRule || gDone(L.id), ref = G_TOPICS.find(t => t.id === L.id);
   frag.append(h("div", { class: "bar" },
-    h("button", { type: "button", class: "round", "aria-label": "Ко всем темам", onclick: () => { S.gTopic = null; go("grammar"); } }, back()),
-    h("h2", null, t.title),
-    h("span", { class: "count" }, gBest(t.id) ? `лучший результат ${gBest(t.id)}/10` : "")));
+    h("button", { type: "button", class: "round", "aria-label": "Ко всем шагам", onclick: () => { S.gTopic = null; go("grammar"); } }, back()),
+    h("h2", null, L.title),
+    h("span", { class: "count" }, gState(L.id).best ? `лучший результат ${gState(L.id).best} / ${G_LEN}` : "")));
   frag.append(h("div", { class: "grule" },
-    h("p", null, t.rule), gramTable(t.table), t.tip ? h("p", { class: "small muted" }, t.tip) : null,
-    exF ? h("details", { class: "gex" }, h("summary", null, `Все формы слова ${exW.de} — ${firstRu(exW)}`), formsTable(t, exF)) : null,
-    h("div", { class: "row", style: "margin-top:14px" }, h("button", { type: "button", class: "btn ink", onclick: () => startGram(t) }, "Тренироваться · 10 заданий"))));
+    h("div", { class: "label" }, "Посмотри, что меняется"),
+    h("div", { class: "gpairs" }, ...L.pairs.map(([ru, lt]) => h("div", { class: "gpair" }, gramTails(ru), gramTails(lt, "lt")))),
+    !open ? h("div", { class: "row" }, h("button", { type: "button", class: "btn ink", id: "g-open", onclick: () => { S.ui.gRule = true; render(); } }, "Показать правило")) : null,
+    open ? h("div", { class: "grule-text" }, h("div", { class: "label" }, "Правило"), h("p", null, L.rule)) : null,
+    open && L.trap ? h("div", { class: "gtrap" }, h("b", null, "Не как в русском. "), L.trap) : null,
+    open ? h("div", { class: "row", style: "margin-top:6px" }, h("button", { type: "button", class: "btn ink", id: "g-start", onclick: () => startGram(L) }, `Тренироваться · ${G_LEN} заданий`)) : null,
+    open && ref ? h("details", { class: "gex" }, h("summary", null, "Таблица окончаний"), gramTable(ref.table), ref.tip ? h("p", { class: "small muted" }, ref.tip) : null) : null));
+  S.session = null;
   return frag;
 }
-function startGram(t){
-  S.view = "gdrill"; hidePop();
-  S.session = { kind: "gdrill", topic: t, qs: Array.from({ length: 10 }, () => gramQuestion(t)), i: 0, right: 0, wrong: 0, state: {} };
-  render(); window.scrollTo({ top: 0, behavior: "smooth" });
-  enrichGram(S.session);
+function gramFinish(s){
+  if (s.saved) return; s.saved = true;
+  if (s.lesson) gRecord(s.lesson.id, s.right >= G_PASS, s.right);
+  else for (const [id, t] of Object.entries(s.tally)) gRecord(id, t.right / (t.right + t.wrong) >= .7);
 }
 function viewGDrill(){
-  const s = S.session, t = s.topic, st = s.state, frag = document.createDocumentFragment(), total = s.qs.length;
-  const back2 = () => { S.gTopic = t.id; go("grammar"); };
+  const s = S.session, st = s.state, frag = document.createDocumentFragment(), total = s.tasks.length;
+  const toHub = () => { S.gTopic = null; go("grammar"); };
+  const back2 = () => { S.gTopic = s.lesson ? s.lesson.id : null; go("grammar"); };
   frag.append(h("div", { class: "bar" },
-    h("button", { type: "button", class: "round", "aria-label": "К теме", onclick: back2 }, back()),
-    h("h2", null, t.title),
+    h("button", { type: "button", class: "round", "aria-label": "Назад", onclick: back2 }, back()),
+    h("h2", null, s.lesson ? s.lesson.title : "Повторение ", s.lesson ? null : h("em", null, "вперемешку")),
     h("span", { class: "count" }, `${Math.min(s.i + 1, total)} / ${total}`)));
   frag.append(h("div", { class: "progress" }, h("i", { style: `width:${(s.i / total * 100).toFixed(1)}%` })));
   if (s.i >= total){
-    if (!s.saved){ s.saved = true; if (s.right > gBest(t.id)){ S.progress.gram = Object.assign({}, S.progress.gram || {}, { [t.id]: s.right }); queueSave(); } }
-    celebrate(s, s.right === total ? 1 : s.right >= 8 ? .5 : 0);
-    const nextT = G_TOPICS[G_TOPICS.indexOf(t) + 1];
+    gramFinish(s);
+    const passed = s.lesson ? s.right >= G_PASS : s.right / total >= .7, nextL = s.lesson && G_PATH[G_PATH.indexOf(s.lesson) + 1];
+    celebrate(s, s.right === total ? 1 : passed ? .5 : 0);
     frag.append(h("div", { class: "summary" },
-      h("h3", null, `${s.right} / ${total}`, h("em", null, s.right >= 8 ? "шаг пройден!" : "ещё разок — нужно 8 из 10.")),
+      h("h3", null, `${s.right} / ${total}`, h("em", null, s.lesson ? (passed ? "шаг пройден!" : `ещё разок: нужно ${G_PASS} из ${G_LEN}.`) : (passed ? "повторение засчитано." : "эти темы вернутся завтра."))),
+      s.misses.length ? h("div", { class: "missed" }, ...s.misses.map(t => h("div", null, h("span", { lang: "lt" }, t.lt.replace(/[\[\]]/g, "")), h("span", null, t.ru.replace(/[\[\]]/g, ""))))) : null,
       h("div", { class: "row", style: "justify-content:center;margin-top:18px" },
-        h("button", { type: "button", class: "btn " + (s.right >= 8 ? "ghost" : "ink"), onclick: () => startGram(t) }, "Ещё 10 заданий"),
-        s.right >= 8 && nextT ? h("button", { type: "button", class: "btn ink", onclick: () => { S.gTopic = nextT.id; go("grammar"); } }, `Дальше: ${nextT.title}`) : null,
-        h("button", { type: "button", class: "btn ghost", onclick: () => { S.gTopic = null; go("grammar"); } }, "Все темы"))));
+        s.lesson ? h("button", { type: "button", class: "btn " + (passed && nextL ? "ghost" : "ink"), onclick: () => startGram(s.lesson) }, "Ещё раз") : null,
+        passed && nextL ? h("button", { type: "button", class: "btn ink", onclick: () => { S.gTopic = nextL.id; S.ui.gRule = false; go("grammar"); } }, `Дальше: ${nextL.title}`) : null,
+        h("button", { type: "button", class: "btn ghost", onclick: toHub }, "Все шаги"))));
     st.keys = null;
     return frag;
   }
-  const q = s.qs[s.i];
-  const check = () => {
-    if (st.result) return;
-    const val = ($("#gin") || {}).value || ""; if (!val.trim()) return;
-    st.value = val;
-    st.result = norm(val) === norm(q.answer) ? "ok" : fold(val) === fold(q.answer) ? "close" : "bad";
-    const ok = st.result !== "bad"; ok ? (s.right++, Sound.correct()) : s.wrong++;
-    logActivity(); queueSave(); render();
-  };
-  const skip = () => { if (st.result) return; st.result = "skip"; s.wrong++; logActivity(); queueSave(); render(); };
+  const t = s.tasks[s.i], L = t.L, done = st.result != null;
+  const settle = ok => { st.result = ok; if (ok){ s.right++; Sound.correct(); } else { s.wrong++; s.misses.push(t); } if (s.tally){ const x = s.tally[L.id] = s.tally[L.id] || { right: 0, wrong: 0 }; ok ? x.right++ : x.wrong++; } logActivity(); queueSave(); render(); };
   const next = () => { s.i++; s.state = {}; render(); };
-  // The sentence with a gap; after the answer the gap shows the right form.
-  const [pre, post] = q.ctx.lt.split("___");
-  const base = t.kind === "verb" ? q.w.de : q.f.nom;
-  const ask = [
-    h("div", { class: "qtype" }, "Вставь форму"),
-    h("div", { class: "ctx", lang: "lt" }, pre,
-      st.result ? h("span", { class: "blank filled" }, q.answer) : h("span", { class: "blank", "aria-label": "пропуск" }),
-      " ", h("span", { class: "base" }, `(${base})`), post),
-    h("div", { class: "ctx-ru" }, q.ctx.ru.replace("…", `… (${firstRu(q.w)})`).replace(/\((.+?)\) \(\1\)/, "($1)")),
-    t.kind === "verb" ? h("div", { class: "vforms" },
-      h("span", { class: "vlabel" }, "он / она"),
-      ...[["pres", "сейчас"], ["past", "раньше"], ["fut", "потом"]].map(([k, ru]) =>
-        h("span", { class: "vf" + (k === q.tense ? " on" : "") }, h("small", null, ru), h("b", { lang: "lt" }, q.f[k][2])))) : null];
-  frag.append(h("div", { class: "stage" },
-    h("div", { class: "prompt c-sky" }, ...ask),
-    h("div", { class: "dtable" }, h("span", { class: "label" }, t.title), gramTable(t.table, st.result ? q.hl : null)),
-    h("form", { onsubmit: e => { e.preventDefault(); st.result ? next() : check(); } },
-      h("input", { id: "gin", class: "field", lang: "lt", autocomplete: "off", autocapitalize: "off", spellcheck: "false", placeholder: "Форма по-литовски…", value: st.value || "", readonly: st.result ? true : null }),
-      st.result ? h("div", { class: "feedback " + (st.result === "ok" || st.result === "close" ? "ok" : "bad") },
-        h("b", null, { ok: "Верно!", close: "Верно — но проверь диакритику.", bad: "Не совсем.", skip: "Вот как правильно:" }[st.result]),
-        gramWhy(t, q),
-        h("details", { class: "gex" }, h("summary", null, "Все формы"), formsTable(t, q.f))) : null,
-      h("div", { class: "actions" + (st.result ? " next-row" : "") },
-        !st.result ? h("button", { type: "button", class: "btn ghost", onclick: skip }, "Не знаю") : h("span"),
-        h("button", { type: "submit", class: "btn ink" }, st.result ? "Дальше" : "Проверить", " ", h("span", { class: "kbd" }, "Enter"))))));
-  st.keys = st.result ? { Enter: next } : null;
-  requestAnimationFrame(() => { const f = $("#gin"); if (f && !st.result) f.focus(); });
+  const skip = () => { if (done) return; st.skipped = true; settle(false); };
+  // A form that exists but belongs to another case or person is wrong even if only a diacritic differs (mamą ≠ mama).
+  const check = () => {
+    if (done) return; const val = ($("#gin") || {}).value || ""; if (!val.trim()) return; st.value = val;
+    const exact = norm(val) === norm(t.answer), loose = !exact && fold(val) === fold(t.answer) && !t.others.some(x => norm(x) === norm(val));
+    st.close = loose; settle(exact || loose);
+  };
+  const hintLine = L.kind === "verb" ? `он/она: ${verbForms(t.w)[L.tense][2]}` : null;
+  const askCase = t.type === "case";
+  const qs = askCase ? "На какой вопрос отвечает слово?" : t.type === "tail" ? "Выбери форму" : "Напиши форму";
+  const stage = h("div", { class: "stage" },
+    h("div", { class: "prompt c-sky" },
+      h("div", { class: "qtype" }, qs),
+      h("div", { class: askCase ? "ctx" : "ctx-ru" }, ...[].concat(gramSent(t.ru, "mark"))),
+      askCase && !done ? null : h("div", { class: "ctx", lang: "lt", style: askCase ? null : "margin-top:10px" }, ...[].concat(gramSent(t.lt, done ? "fill" : "blank", t.stem)), done ? null : h("span", { class: "base" }, ` (${t.base}${hintLine ? " · " + hintLine : ""})`))));
+  if (askCase){
+    const choose = k => { if (done) return; st.choice = k; settle(k === L.key); };
+    stage.append(h("div", { class: "options", role: "group", "aria-label": "Варианты ответа" }, ...t.cases.map((k, i) => h("button", { type: "button", class: "opt" + (done && k === L.key ? " right" : done && k === st.choice ? " wrong" : ""), disabled: done && k !== L.key && k !== st.choice ? true : null, onclick: () => choose(k) },
+      h("span", { class: "n" }, i + 1), h("span", { lang: "lt" }, G_ASK[k][0]), " — ", G_ASK[k][1]))));
+    st.keys = done ? null : Object.fromEntries(t.cases.map((k, i) => [String(i + 1), () => choose(k)]));
+  } else if (t.type === "tail"){
+    const choose = x => { if (done) return; st.choice = x; settle(x === t.answer); };
+    stage.append(h("div", { class: "options", role: "group", "aria-label": "Варианты ответа" }, ...t.opts.map((x, i) => h("button", { type: "button", class: "opt" + (done && x === t.answer ? " right" : done && x === st.choice ? " wrong" : ""), disabled: done && x !== t.answer && x !== st.choice ? true : null, onclick: () => choose(x) },
+      h("span", { class: "n" }, i + 1), gramForm(x, t.stem)))));
+    st.keys = done ? null : Object.fromEntries(t.opts.map((x, i) => [String(i + 1), () => choose(x)]));
+  } else {
+    stage.append(h("form", { onsubmit: e => { e.preventDefault(); done ? next() : check(); } },
+      h("input", { id: "gin", class: "field", lang: "lt", autocomplete: "off", autocapitalize: "off", spellcheck: "false", placeholder: "Форма по-литовски…", "aria-label": "Твой ответ по-литовски", value: st.value || "", readonly: done ? true : null }),
+      !done ? h("div", { class: "actions" }, h("button", { type: "button", class: "btn ghost", onclick: skip }, "Не знаю"), h("button", { type: "submit", class: "btn ink" }, "Проверить ", h("span", { class: "kbd" }, "Enter"))) : null));
+    st.keys = null;
+    if (!done) requestAnimationFrame(() => { const f = $("#gin"); if (f) f.focus(); });
+  }
+  if (!done && t.type !== "type"){ stage.append(h("div", { class: "skip-row" }, h("button", { type: "button", class: "btn ghost skip", onclick: skip }, "Не знаю ", h("span", { class: "kbd" }, "0")))); st.keys = Object.assign(st.keys || {}, { "0": skip }); }
+  if (done){
+    const ok = st.result;
+    stage.append(h("div", { class: "feedback " + (ok ? "ok" : "bad") },
+      h("b", null, st.close ? "Верно, но проверь диакритику." : ok ? "Верно!" : st.skipped ? "Вот как правильно:" : "Не совсем."),
+      h("p", { style: "margin:6px 0 0" }, h("span", { lang: "lt" }, t.base, " → "), gramForm(t.answer, t.stem), sayBtn(t.w, "w", "sm")),
+      h("p", { style: "margin:4px 0 0" }, "Почему так: ", L.why, "."),
+      t.note ? h("p", { style: "margin:4px 0 0" }, h("b", null, "Не как в русском. "), t.note) : null));
+    stage.append(h("div", { class: "actions next-row", style: "grid-template-columns:1fr" }, h("button", { type: "button", class: "btn ink", id: "gnext", onclick: next }, "Дальше ", h("span", { class: "kbd" }, "Enter"))));
+    st.keys = { Enter: next };
+    requestAnimationFrame(() => { const b = $("#gnext"); if (b) b.focus({ preventScroll: true }); });
+  }
+  frag.append(stage);
   return frag;
 }
 
