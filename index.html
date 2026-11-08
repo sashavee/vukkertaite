@@ -2025,18 +2025,27 @@ function viewCards(){
   if (s.i >= s.items.length){ frag.append(summary()); return frag; }
   const w = s.items[s.i];
   const flipped = !!s.state.flipped;
-  if (!s.state.said && autoSay()){ s.state.said = true; const k = sayKey(w); if (k) setTimeout(() => Say.play(k), 120); }
-  const flip = () => { s.state.flipped = !s.state.flipped; $(".flash").classList.toggle("flipped", s.state.flipped); $(".flash").setAttribute("aria-label", s.state.flipped ? "Показать литовский" : "Показать перевод"); };
+  // Direction is remembered: "lt" shows the Lithuanian word first, "ru" asks it from the translation.
+  const rev = load("ww-card-dir", "lt") === "ru";
+  const sayNow = delay => { if (s.state.said || !autoSay()) return; s.state.said = true; const k = sayKey(w); if (k) setTimeout(() => Say.play(k), delay); };
+  if (!rev) sayNow(120);   // from Russian the sound would give the answer away, so it waits for the flip
+  const label = on => (on !== rev) ? "Показать литовский" : "Показать перевод";
+  const flip = () => { s.state.flipped = !s.state.flipped; $(".flash").classList.toggle("flipped", s.state.flipped); $(".flash").setAttribute("aria-label", label(s.state.flipped)); if (rev && s.state.flipped) sayNow(250); };
+  const setDir = d => { if (d === (rev ? "ru" : "lt")) return; store("ww-card-dir", d); s.state.flipped = false; s.state.said = false; render(); };
+  const ltSide = onBack => h("div", { class: "big", style: onBack ? "font-size:clamp(26px,4.4vw,46px)" : null }, artPill(w), showLt(w), sayBtn(w, "w", "nest"));   // the back also holds forms and an example
+  const ruSide = () => h("div", { class: "ru" }, w.ru);
   const answer = ok => {
     const again = s.state.seenAgain || new Set(); s.state.seenAgain = again;
     if (ok){ s.right++; } else { s.wrong++; if (!again.has(w.id)){ again.add(w.id); s.items.push(w); } }
     if (ok) Sound.correct(); grade(w.id, ok); s.i++; s.state = { seenAgain: again }; render();
   };
   frag.append(h("div", { class: "stage" },
-    h("button", { type: "button", class: "flash" + (flipped ? " flipped" : ""), "aria-label": flipped ? "Показать литовский" : "Показать перевод", onclick: flip },
+    h("div", { class: "row", style: "justify-content:center;margin-bottom:10px" }, h("span", { class: "seg", role: "group", "aria-label": "Направление карточек" }, ...[["lt", "С литовского"], ["ru", "С русского"]].map(([d, t]) =>
+      h("button", { type: "button", class: (rev ? "ru" : "lt") === d ? "on" : "", "aria-pressed": String((rev ? "ru" : "lt") === d), onclick: () => setDir(d) }, t)))),
+    h("button", { type: "button", class: "flash" + (flipped ? " flipped" : ""), "aria-label": label(flipped), onclick: flip },
       h("div", { class: "flash-inner" },
-        h("div", { class: "face front" }, h("div", { class: "big" }, artPill(w), showLt(w), sayBtn(w, "w", "nest")), h("span", { class: "hint" }, "Нажми, пробел или Enter — перевернуть")),
-        h("div", { class: "face back" }, h("div", { class: "ru" }, w.ru), toneLine(w), w.g ? h("div", { class: "gram" }, w.g) : null, exampleBlock(w)))),
+        h("div", { class: "face front" }, rev ? ruSide() : ltSide(), h("span", { class: "hint" }, "Нажми, пробел или Enter — перевернуть")),
+        h("div", { class: "face back" }, rev ? ltSide(true) : ruSide(), toneLine(w), w.g ? h("div", { class: "gram" }, w.g) : null, exampleBlock(w)))),
     h("div", { class: "actions" },
       h("button", { type: "button", class: "btn no", onclick: () => answer(false) }, "Не знаю ", h("span", { class: "kbd" }, "←")),
       h("button", { type: "button", class: "btn yes", onclick: () => answer(true) }, "Знаю ", h("span", { class: "kbd" }, "→ / Enter")))));
