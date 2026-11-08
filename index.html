@@ -2975,7 +2975,7 @@ function gRecord(id, ok, score){
   else gPatch(id, { best });
 }
 function adjForms(de){
-  if (/us$/.test(de)){ const s = de.slice(0, -2); return { nomM: de, nomF: s + "i", accM: s + "ų", accF: s + "ią" }; }
+  if (/us$/.test(de)){ const s = de.slice(0, -2); return { nomM: de, nomF: s + "i", accM: s + "ų", accF: soften(s) + "ią" }; }   // platus → plačią
   if (/is$/.test(de)){ const s = de.slice(0, -2); return { nomM: de, nomF: s + "ė", accM: s + "į", accF: s + "ę" }; }
   if (/as$/.test(de)){ const s = de.slice(0, -2); return { nomM: de, nomF: s + "a", accM: s + "ą", accF: s + "ą" }; }
   return null;
@@ -2990,9 +2990,36 @@ function gramPool(L, w){
   return [f.acc, f.gen, f.dat, f.ins, f.loc, f.nom, ...(f.pl ? [f.pl] : [])];
 }
 function gramTask(L, sent, type){
-  const [ru, lt, base, note] = sent, answer = gramTarget(lt).toLowerCase(), w = gramWord(L, base);
+  const [ru, lt, base, note] = sent;
+  return gramBuild({ L, w: gramWord(L, base), ru, lt, base, note, answer: gramTarget(lt).toLowerCase(), type });
+}
+// Words the learner has already met in the modules: same logic as the lesson, without a ready-made sentence.
+const G_TENSE_RU = { pres: "сейчас", past: "раньше", fut: "потом" };
+function gramSoloOptions(L, w){
+  if (L.kind === "verb"){
+    const f = !w.art && verbForms(w); if (!f || f.refl) return [];
+    return [0, 1, 3, 4].map(i => ({ answer: f[L.tense][i], ask: `${["я", "ты", "", "мы", "вы"][i]} · ${G_TENSE_RU[L.tense]}` }));
+  }
+  if (L.kind === "adj"){
+    if (w.art || !/^būdv\. · /.test(w.g || "")) return [];
+    const f = adjForms(w.de); if (!f || f.nomF !== (w.g.split(" · ")[1] || "").trim()) return [];
+    return [{ answer: f.nomF, ask: "женский род" }, { answer: f.accF, ask: "женский род, кого? что?" }, { answer: f.accM, ask: "мужской род, кого? что?" }];
+  }
+  const f = w.art && nounForms(w); if (!f || !f[L.key]) return [];
+  return [{ answer: f[L.key], ask: L.kind === "pl" ? "много" : `${G_ASK[L.key][0]} ${G_ASK[L.key][1]}` }];
+}
+function gramSolo(L, type, used){
+  for (const w of shuffle(S.words.filter(x => statusOf(x.id) !== "new" && !used.has(x.id)))){
+    const opts = gramSoloOptions(L, w); if (!opts.length) continue;
+    const o = pick(opts); used.add(w.id);
+    return gramBuild({ L, w, ru: firstRu(w), lt: `${w.de} → [${o.answer}]`, base: w.de, answer: o.answer, type, solo: o.ask });
+  }
+  return null;
+}
+function gramBuild(fields){
+  const { L, w, answer, type } = fields;
   const others = [...new Set(gramPool(L, w).filter(x => norm(x) !== norm(answer)))];
-  const task = { L, w, ru, lt, base, note, answer, type, others, stem: gramStem(L, w) };
+  const task = Object.assign({}, fields, { others, stem: gramStem(L, w) });
   // Same person of the same tense first: a verb's nearest mistake is the wrong ending, not the wrong tense.
   const near = L.kind === "verb" ? others.filter(x => verbForms(w)[L.tense].includes(x)) : others;
   task.opts = shuffle([answer, shuffle(near.length ? near : others)[0]]);
@@ -3012,14 +3039,20 @@ function gramLessonTasks(L){
   const stages = L.kind === "noun" ? [["case", 4], ["tail", 4], ["type", 4]] : [["tail", 6], ["type", 6]];
   const sents = gramPick(L, G_LEN);
   const types = stages.flatMap(([t, n]) => Array(n).fill(t));
+  const soloAt = L.kind === "noun" ? [5, 6, 9, 10] : [4, 5, 9, 10], used = new Set();
   return types.map((t, i) => {
+    const own = soloAt.includes(i) && gramSolo(L, t, used);   // falls back to a sentence for someone with no studied words yet
+    if (own) return own;
     if (old.length && i % 4 === 3){ const X = pick(old), tx = t === "case" && X.kind !== "noun" ? "tail" : t; return gramTask(X, gramPick(X, 1)[0], tx); }
     return gramTask(L, sents[i], t);
   });
 }
 function gramMixedTasks(list){
-  const tasks = [];
-  for (let i = 0; i < G_LEN; i++){ const L = list[i % list.length], ty = gramTypes(L); tasks.push(gramTask(L, gramPick(L, 1)[0], ty[i % ty.length])); }
+  const tasks = [], used = new Set();
+  for (let i = 0; i < G_LEN; i++){
+    const L = list[i % list.length], ty = gramTypes(L), t = ty[i % ty.length];
+    tasks.push((i % 3 === 2 && t !== "case" && gramSolo(L, t, used)) || gramTask(L, gramPick(L, 1)[0], t));
+  }
   return shuffle(tasks);
 }
 const pick = a => a[Math.random() * a.length | 0];
@@ -3121,6 +3154,7 @@ function gramWhy(t){
   }
   if (L.kind === "adj"){
     const forms = adjForms(t.w.de), key = Object.keys(forms).find(k => forms[k] === t.answer), isAcc = key.startsWith("acc");
+    if (t.solo) return `${t.solo.replace("кого? что?", "вопрос ką?")}, поэтому ${t.answer}.`;
     const gender = forms.accM === forms.accF && isAcc ? "" : /M$/.test(key) ? "мужского рода" : "женского рода";
     return `существительное рядом${gender ? " " + gender : ""}${isAcc ? (gender ? " и" : "") + " отвечает на ką?" : ""}, поэтому ${t.answer}.`;
   }
@@ -3168,12 +3202,12 @@ function viewGDrill(){
   };
   const hintLine = L.kind === "verb" ? `она/он/они: ${verbForms(t.w)[L.tense][2]}` : null;
   const askCase = t.type === "case";
-  const qs = askCase ? "На какой вопрос отвечает слово?" : t.type === "tail" ? "Выбери форму" : "Напиши форму";
+  const qs = (askCase ? "На какой вопрос отвечает слово?" : t.type === "tail" ? "Выбери форму" : "Напиши форму") + (t.solo ? " · слово из твоих модулей" : "");
   const stage = h("div", { class: "stage" },
     h("div", { class: "prompt c-sky" },
       h("div", { class: "qtype" }, qs),
       h("div", { class: askCase ? "ctx" : "ctx-ru" }, ...[].concat(gramSent(t.ru, "mark"))),
-      askCase && !done ? null : h("div", { class: "ctx", lang: "lt", style: askCase ? null : "margin-top:10px" }, ...[].concat(gramSent(t.lt, done ? "fill" : "blank", t.stem)), done ? null : h("span", { class: "base" }, ` (${t.base}${hintLine ? " · " + hintLine : ""})`))));
+      askCase && !done ? null : h("div", { class: "ctx", lang: "lt", style: askCase ? null : "margin-top:10px" }, ...[].concat(gramSent(t.lt, done ? "fill" : "blank", t.stem)), done ? null : h("span", { class: "base" }, ` (${t.solo || t.base}${hintLine ? " · " + hintLine : ""})`))));
   // The rule on demand, inside the task. For "which case?" it lists the choices' triggers, since naming this lesson's rule would give the answer away.
   const toggleHint = () => { const f = $("#gin"); if (f) st.value = f.value; st.hint = !st.hint; render(); };
   if (!done){
