@@ -292,6 +292,10 @@ input[type="checkbox"]{width:20px;height:20px;accent-color:var(--ink)}
 .list{padding-bottom:84px}
 
 [hidden]{display:none!important}
+.ltkeys{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:10px}
+.ltkey{min-width:38px;min-height:38px;padding:0 6px;border-radius:10px;border:1.5px solid var(--line);background:var(--soft);color:var(--ink);font:inherit;font-size:17px;font-weight:600;cursor:pointer}
+.ltkey:hover{border-color:var(--ink)}
+@media (max-width:600px){.ltkeys{flex-wrap:nowrap;gap:4px}.ltkey{flex:1 1 0;min-width:0;min-height:42px;padding:0}}
 .tail,.feedback b.tail{display:inline;background:var(--yellow);color:var(--on-card);border-radius:5px;padding:0 3px;font-weight:700}
 .gtarget{background:var(--yellow);color:var(--on-card);border-radius:6px;padding:0 4px}
 .gidea{background:var(--soft);border-radius:24px;padding:20px 22px;margin:0 0 16px}
@@ -305,6 +309,9 @@ input[type="checkbox"]{width:20px;height:20px;accent-color:var(--ink)}
 .gpairs{display:grid;gap:2px}
 .gpair{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--line);font-size:18px}
 .gtrap{background:color-mix(in srgb,var(--pink) 30%,var(--sheet));border-radius:16px;padding:12px 16px;line-height:1.5}
+.ghint{background:var(--soft);border-radius:18px;padding:14px 16px;margin-top:10px;display:grid;gap:8px;line-height:1.5}
+.ghint p,.grule-text p,.gref-item p{margin:0;white-space:pre-line}
+.ghint-row{display:flex;justify-content:center;margin-top:12px}
 .gref{margin-top:18px}
 .gref-item{margin:14px 0}
 .gref-item h3{margin:0 0 4px;font-size:16px}
@@ -2031,6 +2038,18 @@ function summary(extra){
       h("button", { type: "button", class: "btn ghost", onclick: goBack }, "Назад к модулю")));
 }
 const ART = { vyr: ["der", "vyr."], mot: ["die", "mot."], bendr: ["derdie", "bendr."] };
+/* Lithuanian letters as buttons, so no keyboard layout is needed. target: an input's id, or a function returning it. */
+function ltInsert(target, ch){
+  const f = document.getElementById(typeof target === "function" ? target() : target); if (!f || f.readOnly) return;
+  const a = f.selectionStart == null ? f.value.length : f.selectionStart, b = f.selectionEnd == null ? a : f.selectionEnd;
+  f.value = f.value.slice(0, a) + ch + f.value.slice(b);
+  f.focus(); f.setSelectionRange(a + ch.length, a + ch.length);
+  f.dispatchEvent(new Event("input", { bubbles: true }));   // the exercises keep their text from this event
+}
+function ltKeys(target){
+  return h("div", { class: "ltkeys", role: "group", "aria-label": "Литовские буквы" }, ..."ąčęėįšųūž".split("").map(ch =>
+    h("button", { type: "button", class: "ltkey", lang: "lt", "aria-label": "Вставить букву " + ch, onmousedown: e => e.preventDefault(), onclick: () => ltInsert(target, ch) }, ch)));   // mousedown: the field keeps focus and caret
+}
 function artPill(w){ const a = ART[w.art]; if (!a) return null; return h("span", { class: "art art-" + a[0], title: { vyr: "мужской род", mot: "женский род", bendr: "общий род" }[w.art] }, a[1]); }
 function exampleBlock(w){ return w.ex ? h("div", { class: "exa" }, h("span", { class: "label" }, "Пример"), h("span", { class: "exa-de", lang: "lt" }, w.ex, " ", sayBtn(w, "e", "sm")), h("i", null, w.exRu)) : null; }
 function formsLine(w){ return w.g ? h("div", { class: "forms" }, h("span", { class: "label" }, "Формы"), h("span", { lang: "lt" }, w.g)) : null; }
@@ -2127,6 +2146,7 @@ function viewSpell(){
     h("div", { class: "prompt c-lime" }, h("div", { class: "ru" }, w.ru), h("div", { class: "sub" }, isNoun(w) ? "Существительное — в именительном падеже" : "Напиши литовское слово или выражение")),
     h("form", { onsubmit: e => { e.preventDefault(); st.result ? next() : check(); } },
       h("input", { id: "spell", class: "field", autocomplete: "off", autocapitalize: "off", spellcheck: "false", lang: "lt", placeholder: "По-литовски…", value: st.value || "", readonly: st.result ? true : null, "aria-label": "Твой ответ по-литовски" }),
+      !st.result ? ltKeys("spell") : null,
       st.result ? h("div", { class: "feedback " + (st.result === "ok" || st.result === "close" ? "ok" : "bad") },
         h("b", null, msg), h("div", { lang: "lt" }, artPill(w), " ", showLt(w), sayBtn(w, "w", "sm")), formsLine(w), exampleBlock(w)) : null,
       h("div", { class: "actions" + (st.result ? " next-row" : "") },
@@ -2229,6 +2249,7 @@ function questionView(q, st, onAnswer, onNext){
     const check = () => { if (st.result != null) return; const v = $("#qtyped").value; if (!v.trim()) return; st.value = v; st.verdict = checkTyped(w, v); settle(st.verdict === "ok" || st.verdict === "close"); };
     wrap.append(h("form", { onsubmit: e => { e.preventDefault(); st.result != null ? onNext() : check(); } },
       h("input", { id: "qtyped", class: "field", autocomplete: "off", autocapitalize: "off", spellcheck: "false", lang: "lt", placeholder: "По-литовски…", value: st.value || "", readonly: done ? true : null, "aria-label": "Твой ответ по-литовски" }),
+      !done ? ltKeys("qtyped") : null,
       !done ? h("div", { class: "actions" }, h("button", { type: "button", class: "btn ghost", onclick: skip }, "Не знаю"), h("button", { type: "submit", class: "btn ink" }, "Проверить ", h("span", { class: "kbd" }, "Enter"))) : null));
     if (!done) requestAnimationFrame(() => { const f = $("#qtyped"); if (f) f.focus(); });
     st.keys = null;
@@ -2483,6 +2504,7 @@ function viewSentenceWeb(){
     h("form", { onsubmit: e => { e.preventDefault(); if (!st.checked) check(); } },
       h("textarea", { id: "tr-in", class: "field", lang: "lt", spellcheck: "false", placeholder: "Пиши по-литовски… (Enter — проверить)", readonly: st.checked ? true : null,
         oninput: e => { st.text = e.target.value; }, onkeydown: e => { if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); if (!st.checked) check(); } } }, st.text || ""),
+      !st.checked ? ltKeys("tr-in") : null,
       !st.checked ? h("div", { class: "actions" },
         h("button", { type: "button", class: "btn ghost", onclick: () => { const f = $("#tr-in"); if (f) f.value = ""; check(); } }, "Не знаю — показать"),
         h("button", { type: "submit", class: "btn ink" }, "Проверить ", h("span", { class: "kbd" }, "Enter"))) : null),
@@ -2600,6 +2622,7 @@ List EVERY mistake (including small ones like endings and diacritics), each with
       h("textarea", { id: "tr-in", class: "field", lang: "lt", spellcheck: "false", placeholder: "Пиши по-литовски… (Enter — проверить, Shift+Enter — новая строка)", readonly: st.busy || r ? true : null,
         oninput: e => { st.text = e.target.value; },
         onkeydown: e => { if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); r ? next() : run(); } } }, st.text || ""),
+      !r ? ltKeys("tr-in") : null,
       !r ? h("div", { class: "actions" },
         h("button", { type: "button", class: "btn ghost", onclick: reveal }, "Не знаю — показать"),
         st.busy ? h("button", { type: "button", class: "btn ink", onclick: () => st.ctl && st.ctl.abort() }, "Стоп") : h("button", { type: "submit", class: "btn ink" }, "Проверить ", h("span", { class: "kbd" }, "Enter"))) : null),
@@ -2765,6 +2788,7 @@ function gapBody(st){
   return h("div", null,
     st.checked ? null : h("p", { class: "small muted" }, "Перетащи слово в пропуск или нажми на него, чтобы заполнить выбранный пропуск. Начальную форму засчитаем. Если хочешь потренировать окончания, впиши нужную форму сама — после проверки покажем, как в тексте."),
     bank, box,
+    st.checked ? null : ltKeys(() => { const f = document.activeElement; return f && f.classList.contains("gap") ? f.id : "gap-" + (st.focus || 1); }),
     st.checked ? h("div", { class: "feedback " + (st.score === st.words.length ? "ok" : "bad") }, h("b", null, `${st.score} / ${st.words.length} верно`), " Зелёные закрепятся, остальные раньше вернутся в карточках.") : null,
     h("details", { class: "tr" }, h("summary", null, "Показать перевод на русский"), h("p", null, String(r.translation || ""))),
     h("div", { class: "actions" },
@@ -2791,7 +2815,6 @@ function nounForms(w){
   return Object.assign({ nom, pl }, f);
 }
 // Verbs: present / past / future persons from the three 3rd-person forms (dirba · dirbo · dirbs).
-const PERSONS = [["aš", "я"], ["tu", "ты"], ["jis / ji", "он / она"], ["mes", "мы"], ["jūs", "вы"], ["jie / jos", "они"]];
 function presentOf(p3, refl){
   const b = refl ? p3.slice(0, -2) : p3;
   let f;
@@ -2839,11 +2862,11 @@ const CASES = { gen: ["родительный", "ko?"], dat: ["дательны�
 const TENSES = { pres: "сейчас (настоящее)", past: "раньше (прошедшее)", fut: "потом (будущее)" };
 const G_TOPICS = [
   { id: "pres", kind: "verb", tense: "pres", title: "Настоящее время", sub: "dirbu, turiu, darau",
-    rule: "Глаголы делятся на три группы по форме «он/она» — её ты учишь вместе со словом (первая форма в грамматике). Формы jis/ji и jie/jos всегда одинаковые.",
-    table: [["он/она на →", "-a (dirba)", "-i (turi)", "-o (daro)"], ["aš", "-u", "-iu", "-au"], ["tu", "-i", "-i", "-ai"], ["jis / ji", "-a", "-i", "-o"], ["mes", "-ame", "-ime", "-ome"], ["jūs", "-ate", "-ite", "-ote"], ["jie / jos", "-a", "-i", "-o"]],
+    rule: "Глаголы делятся на три группы по форме «она/он/они» — её ты учишь вместе со словом (первая форма в грамматике). Формы ji, jis, jie и jos всегда одинаковые.",
+    table: [["она/он/они на →", "-a (dirba)", "-i (turi)", "-o (daro)"], ["aš", "-u", "-iu", "-au"], ["tu", "-i", "-i", "-ai"], ["ji, jis, jie, jos", "-a", "-i", "-o"], ["mes", "-ame", "-ime", "-ome"], ["jūs", "-ate", "-ite", "-ote"]],
     tip: "В группе -i перед -iu t → č, d → dž: girdi → girdžiu, sėdi → sėdžiu.", ex: "dirbti" },
   { id: "acc", kind: "noun", key: "acc", title: "Винительный: ką?", sub: "matau namą, gatvę",
-    rule: "Отвечает на вопрос «кого? что?» после большинства глаголов (turiu, matau, perku, myliu) и после į «куда»: einu į parduotuvę.",
+    rule: "Сначала смотришь, как будет «она делает»: это первая форма в карточке глагола.\nКончается на -a (dirba) → я dirbu, ты dirbi, мы dirbame, вы dirbate.\nКончается на -i (turi) → я turiu, ты turi, мы turime, вы turite.\nКончается на -o (mato) → я matau, ты matai, мы matome, вы matote.",
     table: [["окончание", "→ ką?", "пример"], ["-as", "-ą", "namas → namą"], ["-is / -ys", "-į", "brolis → brolį"], ["-us", "-ų", "turgus → turgų"], ["-a", "-ą", "mama → mamą"], ["-ė", "-ę", "gatvė → gatvę"]],
     tip: "Носовые ą, ę, į, ų произносятся как долгие а, э, и, у.", ex: "namas" },
   { id: "gen", kind: "noun", key: "gen", title: "Родительный: ko?", sub: "nėra laiko, iš Vilniaus",
@@ -2851,16 +2874,16 @@ const G_TOPICS = [
     table: [["окончание", "→ ko?", "пример"], ["-as", "-o", "namas → namo"], ["-is / -ys", "-io", "brolis → brolio"], ["-us", "-aus", "turgus → turgaus"], ["-a", "-os", "mama → mamos"], ["-ė", "-ės", "gatvė → gatvės"]],
     tip: "Родительный ты уже видишь в каждой карточке — это вторая форма в грамматике: vyr. · namo.", ex: "gatvė" },
   { id: "past", kind: "verb", tense: "past", title: "Прошедшее время", sub: "dirbau, dariau",
-    rule: "Строится от формы «он/она» в прошедшем (вторая форма в грамматике). Две группы: на -o и на -ė.",
-    table: [["он/она на →", "-o (dirbo)", "-ė (darė)"], ["aš", "-au", "-iau"], ["tu", "-ai", "-ei"], ["jis / ji", "-o", "-ė"], ["mes", "-ome", "-ėme"], ["jūs", "-ote", "-ėte"], ["jie / jos", "-o", "-ė"]],
+    rule: "Строится от формы «она/он/они» в прошедшем (вторая форма в грамматике). Две группы: на -o и на -ė.",
+    table: [["она/он/они на →", "-o (dirbo)", "-ė (darė)"], ["aš", "-au", "-iau"], ["tu", "-ai", "-ei"], ["ji, jis, jie, jos", "-o", "-ė"], ["mes", "-ome", "-ėme"], ["jūs", "-ote", "-ėte"]],
     tip: "Перед -iau t → č, d → dž: matė → mačiau, vedė → vedžiau.", ex: "daryti" },
   { id: "loc", kind: "noun", key: "loc", title: "Местный: kur?", sub: "Vilniuje, parke",
-    rule: "Отвечает на «где?» и используется без предлога: gyvenu Vilniuje, dirbu biure, esu parke.",
+    rule: "Сначала смотришь, как будет «она делала»: это вторая форма в карточке глагола.\nКончается на -o (dirbo) → я dirbau, ты dirbai, мы dirbome, вы dirbote.\nКончается на -ė (matė) → я mačiau, ты matei, мы matėme, вы matėte.",
     table: [["окончание", "→ kur?", "пример"], ["-as", "-e", "parkas → parke"], ["-is / -ys", "-yje", "kambarys → kambaryje"], ["-us", "-uje", "turgus → turguje"], ["-a", "-oje", "mokykla → mokykloje"], ["-ė", "-ėje", "gatvė → gatvėje"]],
     tip: "«Дома» — namie или namuose (это форма множественного числа).", ex: "parkas" },
   { id: "refl", kind: "verb", tense: "pres", refl: true, title: "Возвратные глаголы: -si", sub: "mokausi, keliuosi",
     rule: "-si — это литовское «-ся». При спряжении оно прирастает к окончанию. С приставкой или ne- частица si встаёт внутрь: nesijaudink, nusiramink.",
-    table: [["он/она на →", "-asi / -iasi", "-osi", "-isi"], ["aš", "-uosi", "-ausi", "-iuosi"], ["tu", "-iesi", "-aisi", "-iesi"], ["jis / ji", "-asi", "-osi", "-isi"], ["mes", "-amės", "-omės", "-imės"], ["jūs", "-atės", "-otės", "-itės"], ["jie / jos", "-asi", "-osi", "-isi"]],
+    table: [["она/он/они на →", "-asi / -iasi", "-osi", "-isi"], ["aš", "-uosi", "-ausi", "-iuosi"], ["tu", "-iesi", "-aisi", "-iesi"], ["ji, jis, jie, jos", "-asi", "-osi", "-isi"], ["mes", "-amės", "-omės", "-imės"], ["jūs", "-atės", "-otės", "-itės"]],
     tip: "В прошедшем то же самое: mokiausi, mokeisi, mokėsi, mokėmės.", ex: "mokytis" },
   { id: "ins", kind: "noun", key: "ins", title: "Творительный: su kuo?", sub: "su draugu, autobusu",
     rule: "С кем (su draugu), чем или на чём (važiuoju autobusu, moku kortele) и кем работаешь (dirbu mokytoja).",
@@ -2871,11 +2894,11 @@ const G_TOPICS = [
     table: [["окончание", "→ kam?", "пример"], ["-as", "-ui", "draugas → draugui"], ["-is / -ys", "-iui", "brolis → broliui"], ["-us", "-ui", "sūnus → sūnui"], ["-a", "-ai", "mama → mamai"], ["-ė", "-ei", "senelė → senelei"]],
     tip: "Местоимения: man, tau, jam, jai, mums, jums, jiems.", ex: "draugas" },
   { id: "fut", kind: "verb", tense: "fut", title: "Будущее время", sub: "dirbsiu, darysiu",
-    rule: "Строится от формы «он/она» в будущем (третья форма в грамматике). Окончания одни для всех глаголов.",
-    table: [["он/она на →", "-s (dirbs)", "-š / -ž (neš)"], ["aš", "-siu", "-šiu"], ["tu", "-si", "-ši"], ["jis / ji", "-s", "-š"], ["mes", "-sime", "-šime"], ["jūs", "-site", "-šite"], ["jie / jos", "-s", "-š"]],
+    rule: "Строится от формы «она/он/они» в будущем (третья форма в грамматике). Окончания одни для всех глаголов.",
+    table: [["она/он/они на →", "-s (dirbs)", "-š / -ž (neš)"], ["aš", "-siu", "-šiu"], ["tu", "-si", "-ši"], ["ji, jis, jie, jos", "-s", "-š"], ["mes", "-sime", "-šime"], ["jūs", "-site", "-šite"]],
     tip: "Возвратные: mokysiuosi, mokysiesi, mokysis, mokysimės.", ex: "dirbti" },
   { id: "pl", kind: "noun", key: "pl", title: "Множественное число", sub: "namai, gatvės",
-    rule: "Именительный множественного — третья форма в грамматике (dgs.). Мужской и женский род образуют его по-разному.",
+    rule: "Сначала смотришь, как будет «она будет делать»: это третья форма в карточке глагола (dirbs).\nК ней добавляешь хвост: я dirbsiu, ты dirbsi, мы dirbsime, вы dirbsite.",
     table: [["окончание", "→ dgs.", "пример"], ["-as", "-ai", "namas → namai"], ["-is / -ys", "-iai", "brolis → broliai"], ["-us", "-ūs", "sūnus → sūnūs"], ["-a", "-os", "mama → mamos"], ["-ė", "-ės", "gatvė → gatvės"]],
     tip: "Есть слова только во множественном: durys, metai, pinigai, atostogos.", ex: "namas" }
 ];
@@ -2884,10 +2907,10 @@ const G_TOPICS = [
    A sentence is [Russian, Lithuanian, dictionary form, optional note about where Lithuanian differs from Russian]. */
 const G_ASK = { kas: ["kas?", "кто? что?"], acc: ["ką?", "кого? что?"], gen: ["ko?", "кого? чего?"], loc: ["kur?", "где?"], ins: ["su kuo?", "с кем? чем?"], dat: ["kam?", "кому?"] };
 const G_PATH = [
-  { id: "pres", kind: "verb", tense: "pres", title: "Настоящее время", sub: "dirbu, turiu, matau", why: "смотри на форму «он/она» и меняй хвост",
-    pairs: [["я работа{ю}", "aš dirb{u}"], ["ты работа{ешь}", "tu dirb{i}"], ["он работа{ет}", "jis dirb{a}"], ["мы работа{ем}", "mes dirb{ame}"], ["вы работа{ете}", "jūs dirb{ate}"]],
-    rule: "Форма «он/она» — первая в карточке слова. По её последней букве видно семью: на -a (dirba): -u, -i, -ame, -ate. На -i (turi): -iu, -i, -ime, -ite. На -o (mato): -au, -ai, -ome, -ote.",
-    trap: "«Он» и «они» — одна форма: jis dirba, jie dirba.",
+  { id: "pres", kind: "verb", tense: "pres", title: "Настоящее время", sub: "dirbu, turiu, matau", why: "смотри на форму «она/он/они» и меняй хвост",
+    pairs: [["я работа{ю}", "aš dirb{u}"], ["ты работа{ешь}", "tu dirb{i}"], ["она, он работа{ет}, они работа{ют}", "ji, jis, jie, jos dirb{a}"], ["мы работа{ем}", "mes dirb{ame}"], ["вы работа{ете}", "jūs dirb{ate}"]],
+    rule: "Сначала смотришь, как будет «она делает»: это первая форма в карточке глагола.\nКончается на -a (dirba) → я dirbu, ты dirbi, мы dirbame, вы dirbate.\nКончается на -i (turi) → я turiu, ты turi, мы turime, вы turite.\nКончается на -o (mato) → я matau, ты matai, мы matome, вы matote.",
+    trap: "«Она», «он» и «они» — одна форма: ji dirba, jis dirba, jie dirba, jos dirba.",
     s: [["Я [работаю] в офисе.", "Aš [dirbu] biure.", "dirbti"], ["Ты сегодня [работаешь]?", "Ar tu šiandien [dirbi]?", "dirbti"], ["Мы [живём] в Вильнюсе.", "Mes [gyvename] Vilniuje.", "gyventi"], ["Вы [живёте] здесь?", "Ar jūs čia [gyvenate]?", "gyventi"], ["У меня [есть] собака.", "Aš [turiu] šunį.", "turėti", "«У меня есть» — по-литовски «я имею»: turiu."], ["У тебя [есть] ключи?", "Ar tu [turi] raktus?", "turėti", "«У тебя есть» — по-литовски «ты имеешь»: turi."], ["Мы [знаем] это.", "Mes tai [žinome].", "žinoti"], ["Я [знаю] ответ.", "Aš [žinau] atsakymą.", "žinoti"], ["Я [хочу] кофе.", "Aš [noriu] kavos.", "norėti"], ["Вы [хотите] чаю?", "Ar jūs [norite] arbatos?", "norėti"], ["Я [читаю] книгу.", "Aš [skaitau] knygą.", "skaityti"], ["Ты [читаешь] книгу?", "Ar tu [skaitai] knygą?", "skaityti"], ["Мы [говорим] по-литовски.", "Mes [kalbame] lietuviškai.", "kalbėti"], ["Я [говорю] медленно.", "Aš [kalbu] lėtai.", "kalbėti"], ["Я [ем] суп.", "Aš [valgau] sriubą.", "valgyti"], ["Мы [едим] дома.", "Mes [valgome] namie.", "valgyti"], ["Я [иду] домой.", "Aš [einu] namo.", "eiti"], ["Мы [идём] в парк.", "Mes [einame] į parką.", "eiti"], ["Ты [пьёшь] кофе?", "Ar tu [geri] kavą?", "gerti"], ["Я [вижу] собаку.", "Aš [matau] šunį.", "matyti"]] },
   { id: "acc", kind: "noun", key: "acc", title: "Кого? Что?", sub: "matau mamą, turiu butą", why: "вижу, покупаю, имею кого? что? или иду куда? → ką?",
     pairs: [["Вижу мам{у}", "Matau mam{ą}"], ["Вижу улиц{у}", "Matau gatv{ę}"], ["Вижу друг{а}", "Matau draug{ą}"], ["Вижу брат{а}", "Matau brol{į}"]],
@@ -2905,13 +2928,13 @@ const G_PATH = [
     trap: "«В» и «на» исчезают: в парке = parke, на работе = darbe. Но если что-то лежит сверху, нужно ant + ko?: ant stalo.",
     s: [["Я живу в [городе].", "Aš gyvenu [mieste].", "miestas"], ["Мы в [парке].", "Mes [parke].", "parkas"], ["Молоко в [холодильнике].", "Pienas [šaldytuve].", "šaldytuvas"], ["Я работаю в [офисе].", "Aš dirbu [biure].", "biuras"], ["Дети в [школе].", "Vaikai [mokykloje].", "mokykla"], ["Я на [работе].", "Aš [darbe].", "darbas", "Русское «на» исчезает."], ["Мы на [кухне].", "Mes [virtuvėje].", "virtuvė", "Русское «на» исчезает."], ["Машина на [улице].", "Mašina [gatvėje].", "gatvė", "Русское «на» исчезает."], ["Книга в [сумке].", "Knyga [rankinėje].", "rankinė"], ["Магазин в [центре].", "Parduotuvė [centre].", "centras"], ["В [комнате] холодно.", "[Kambaryje] šalta.", "kambarys"], ["Мы в [лесу].", "Mes [miške].", "miškas"], ["Я на [рынке].", "Aš [turguje].", "turgus", "Русское «на» исчезает."], ["Собака в [машине].", "Šuo [mašinoje].", "mašina"], ["В [море] холодная вода.", "[Jūroje] šaltas vanduo.", "jūra"]] },
   { id: "adj", kind: "adj", title: "Прилагательные", sub: "gera mama, gražų miestą", why: "смотри на род и падеж существительного",
-    pairs: [["хорош{ий} друг", "ger{as} draug{as}"], ["хорош{ая} мама", "ger{a} mam{a}"], ["красив{ый} город", "graž{us} miest{as}"], ["красив{ая} улица", "graž{i} gatv{ė}"], ["Вижу хорош{ую} маму", "Matau ger{ą} mam{ą}"], ["Вижу красив{ый} город", "Matau graž{ų} miest{ą}"]],
-    rule: "Прилагательное смотрит на существительное: тот же род и падеж. Три семьи, муж. → жен.: geras → gera, gražus → graži, didelis → didelė. На вопрос ką?: gerą, gražų и gražią, didelį и didelę.",
+    pairs: [["хорош{ая} мама", "ger{a} mam{a}"], ["хорош{ий} друг", "ger{as} draug{as}"], ["красив{ая} улица", "graž{i} gatv{ė}"], ["красив{ый} город", "graž{us} miest{as}"], ["Вижу хорош{ую} маму", "Matau ger{ą} mam{ą}"], ["Вижу красив{ый} город", "Matau graž{ų} miest{ą}"]],
+    rule: "Прилагательное смотрит на существительное: тот же род и падеж. Три семьи, жен. и муж.: gera и geras, graži и gražus, didelė и didelis. На вопрос ką?: gerą, gražią и gražų, didelę и didelį.",
     trap: "Род не всегда как в русском: sriuba (суп) и diena (день) женские, butas (квартира) мужской.",
     s: [["Это [хороший] друг.", "Tai [geras] draugas.", "geras"], ["Это [хорошая] идея.", "Tai [gera] idėja.", "geras"], ["Вильнюс — [красивый] город.", "Vilnius yra [gražus] miestas.", "gražus"], ["Это [красивая] улица.", "Tai [graži] gatvė.", "gražus"], ["Я вижу [красивую] улицу.", "Aš matau [gražią] gatvę.", "gražus"], ["Я вижу [красивый] дом.", "Aš matau [gražų] namą.", "gražus"], ["Я покупаю [новую] книгу.", "Aš perku [naują] knygą.", "naujas"], ["Я покупаю [новый] телефон.", "Aš perku [naują] telefoną.", "naujas"], ["Это [новая] машина.", "Tai [nauja] mašina.", "naujas"], ["Очень [вкусный] суп!", "Labai [skani] sriuba!", "skanus", "Sriuba женского рода, хотя «суп» мужского."], ["Квартира [дорогая].", "Butas [brangus].", "brangus", "Butas мужского рода, хотя «квартира» женского."], ["Это [большой] город.", "Tai [didelis] miestas.", "didelis"], ["Это [большая] семья.", "Tai [didelė] šeima.", "didelis"], ["Это [старая] машина.", "Tai [sena] mašina.", "senas"], ["Сегодня [тёплый] день.", "Šiandien [šilta] diena.", "šiltas", "Diena женского рода, хотя «день» мужского."], ["Это [маленькая] комната.", "Tai [mažas] kambarys.", "mažas", "Kambarys мужского рода, хотя «комната» женского."], ["Я вижу [большой] дом.", "Aš matau [didelį] namą.", "didelis"], ["Я вижу [большую] машину.", "Aš matau [didelę] mašiną.", "didelis"]] },
-  { id: "past", kind: "verb", tense: "past", title: "Прошедшее время", sub: "dirbau, mačiau", why: "смотри на форму «он/она» в прошлом и меняй хвост",
+  { id: "past", kind: "verb", tense: "past", title: "Прошедшее время", sub: "dirbau, mačiau", why: "смотри на форму «она/он/они» в прошлом и меняй хвост",
     pairs: [["я работал{а}", "aš dirb{au}"], ["ты работал{а}", "tu dirb{ai}"], ["мы работал{и}", "mes dirb{ome}"], ["я видел{а}", "aš mač{iau}"], ["ты видел{а}", "tu mat{ei}"], ["мы видел{и}", "mes mat{ėme}"]],
-    rule: "Форма «он/она» в прошлом — вторая в карточке глагола. Две семьи: на -o (dirbo): -au, -ai, -ome, -ote. На -ė (matė): -iau, -ei, -ėme, -ėte.",
+    rule: "Сначала смотришь, как будет «она делала»: это вторая форма в карточке глагола.\nКончается на -o (dirbo) → я dirbau, ты dirbai, мы dirbome, вы dirbote.\nКончается на -ė (matė) → я mačiau, ты matei, мы matėme, вы matėte.",
     trap: "Перед -iau t → č и d → dž: matė → mačiau. Род не важен: «работал» и «работала» — оба dirbau.",
     s: [["Вчера я [работала].", "Vakar aš [dirbau].", "dirbti"], ["Вчера ты [работала]?", "Ar vakar tu [dirbai]?", "dirbti"], ["Мы [жили] в Каунасе.", "Mes [gyvenome] Kaune.", "gyventi"], ["Я [видела] этот фильм.", "Aš [mačiau] šį filmą.", "matyti"], ["Ты [видела] этот фильм?", "Ar tu [matei] šį filmą?", "matyti"], ["Я [купила] хлеб.", "Aš [pirkau] duoną.", "pirkti"], ["Мы [ели] дома.", "Mes [valgėme] namie.", "valgyti"], ["Я [ела] суп.", "Aš [valgiau] sriubą.", "valgyti"], ["Я [читала] книгу.", "Aš [skaičiau] knygą.", "skaityti"], ["Вы [читали] книгу?", "Ar jūs [skaitėte] knygą?", "skaityti"], ["Я [говорила] с мамой.", "Aš [kalbėjau] su mama.", "kalbėti"], ["Мы [говорили] по-литовски.", "Mes [kalbėjome] lietuviškai.", "kalbėti"], ["Я [шла] домой.", "Aš [ėjau] namo.", "eiti"], ["Мы [пили] чай.", "Mes [gėrėme] arbatą.", "gerti"], ["Я [пила] кофе.", "Aš [gėriau] kavą.", "gerti"], ["Я [знала] ответ.", "Aš [žinojau] atsakymą.", "žinoti"]] },
   { id: "ins", kind: "noun", key: "ins", title: "С кем? Чем?", sub: "su mama, autobusu", why: "с кем? чем? на чём еду? → su kuo?",
@@ -2924,9 +2947,9 @@ const G_PATH = [
     rule: "Кому? -a → -ai, -ė → -ei, -as → -ui, -is и -ys → -iui, -us → -ui.",
     trap: "«Мне нравится» и «мне нужно» — как в русском: man patinka, man reikia.",
     s: [["Я звоню [маме].", "Skambinu [mamai].", "mama"], ["Я звоню [брату].", "Skambinu [broliui].", "brolis"], ["Я помогаю [другу].", "Padedu [draugui].", "draugas"], ["Я пишу [подруге].", "Rašau [draugei].", "draugė"], ["Это подарок [маме].", "Tai dovana [mamai].", "mama"], ["Дай [ребёнку] воды.", "Duok [vaikui] vandens.", "vaikas"], ["Я помогаю [соседу].", "Padedu [kaimynui].", "kaimynas"], ["Я звоню [врачу].", "Skambinu [gydytojui].", "gydytojas"], ["Я пишу [учительнице].", "Rašau [mokytojai].", "mokytoja"], ["Это подарок [жене].", "Tai dovana [žmonai].", "žmona"], ["Это подарок [мужу].", "Tai dovana [vyrui].", "vyras"], ["Дай [дочери] книгу.", "Duok [dukrai] knygą.", "dukra"], ["Я звоню [сыну].", "Skambinu [sūnui].", "sūnus"], ["Дай [другу] ключ.", "Duok [draugui] raktą.", "draugas"]] },
-  { id: "fut", kind: "verb", tense: "fut", title: "Будущее время", sub: "dirbsiu, eisime", why: "возьми форму «он/она» в будущем и добавь хвост",
-    pairs: [["я буду работать", "aš dirbs{iu}"], ["ты будешь работать", "tu dirbs{i}"], ["он будет работать", "jis dirbs"], ["мы будем работать", "mes dirbs{ime}"], ["вы будете работать", "jūs dirbs{ite}"]],
-    rule: "Форма «он/она» в будущем — третья в карточке глагола. К ней добавляется хвост: -iu, -i, -ime, -ite. Все глаголы делают это одинаково.",
+  { id: "fut", kind: "verb", tense: "fut", title: "Будущее время", sub: "dirbsiu, eisime", why: "возьми форму «она/он/они» в будущем и добавь хвост",
+    pairs: [["я буду работать", "aš dirbs{iu}"], ["ты будешь работать", "tu dirbs{i}"], ["она, он будет, они будут работать", "ji, jis, jie, jos dirbs"], ["мы будем работать", "mes dirbs{ime}"], ["вы будете работать", "jūs dirbs{ite}"]],
+    rule: "Сначала смотришь, как будет «она будет делать»: это третья форма в карточке глагола (dirbs).\nК ней добавляешь хвост: я dirbsiu, ты dirbsi, мы dirbsime, вы dirbsite.",
     trap: "Русское «буду» не нужно: буду работать = dirbsiu.",
     s: [["Завтра я [буду работать].", "Rytoj aš [dirbsiu].", "dirbti"], ["Завтра ты [будешь работать]?", "Ar rytoj tu [dirbsi]?", "dirbti"], ["Мы [будем жить] здесь.", "Mes čia [gyvensime].", "gyventi"], ["Завтра я [куплю] хлеб.", "Rytoj aš [pirksiu] duoną.", "pirkti"], ["Вечером я [буду звонить] маме.", "Vakare aš [skambinsiu] mamai.", "skambinti"], ["Завтра мы [пойдём] в парк.", "Rytoj mes [eisime] į parką.", "eiti"], ["Завтра я [пойду] домой.", "Rytoj aš [eisiu] namo.", "eiti"], ["Вы завтра [придёте]?", "Ar jūs rytoj [ateisite]?", "ateiti"], ["Завтра я [буду читать] книгу.", "Rytoj aš [skaitysiu] knygą.", "skaityti"], ["Мы [будем есть] дома.", "Mes [valgysime] namie.", "valgyti"], ["Я [буду пить] кофе.", "Aš [gersiu] kavą.", "gerti"], ["Ты завтра [поедешь] в Каунас?", "Ar tu rytoj [važiuosi] į Kauną?", "važiuoti"], ["Завтра мы [поедем] в город.", "Rytoj mes [važiuosime] į miestą.", "važiuoti"], ["Завтра я [буду писать] письмо.", "Rytoj aš [rašysiu] laišką.", "rašyti"], ["Завтра я [увижу] маму.", "Rytoj aš [matysiu] mamą.", "matyti"]] },
   { id: "pl", kind: "pl", key: "pl", title: "Много: множественное число", sub: "vaikai, knygos", why: "их много и это подлежащее → форма dgs. из карточки",
@@ -3021,7 +3044,7 @@ function gramTails(text, lang){
 // Splits a form from its dictionary form: the shared start is the stem, the rest is the tail.
 function gramSplit(form, stem){ let i = 0; while (i < form.length && i < stem.length && form[i] === stem[i]) i++; if (i === form.length) i = Math.max(0, form.length - 1); return [form.slice(0, i), form.slice(i)]; }
 function gramForm(form, stem){ const [a, b] = gramSplit(form, stem); return h("span", { lang: "lt" }, a, h("b", { class: "tail" }, b)); }
-// The unchanging part: for names the word without its ending, for verbs the он/она form without its family letter (the future keeps it whole).
+// The unchanging part: for names the word without its ending, for verbs the third-person form without its family letter (the future keeps it whole).
 function gramStem(L, w){
   if (L.kind === "verb"){ const p3 = verbForms(w)[L.tense][2]; return L.tense === "fut" ? p3 : p3.replace(/ia$|[aioė]$/, ""); }
   return w.de.replace(/(ias|as|is|ys|us|ia|a|ė)$/, "");
@@ -3040,7 +3063,7 @@ function gramMap(){
     h("ol", { class: "gideas" },
       h("li", null, h("b", null, "Слово = основа + хвост. "), "Основа не меняется, а хвост показывает роль слова. Это та же логика, что в русском."),
       h("li", null, h("b", null, "Прилагательное повторяет за существительным. "), "Род и падеж те же: ", gramTails("ger{a} mam{a}", "lt"), ", ", gramTails("ger{as} draug{as}", "lt"), "."),
-      h("li", null, h("b", null, "Глагол строится от формы «он/она». "), "Она есть в карточке слова. Меняешь только хвост: ", gramTails("dirb{a} → dirb{u}", "lt"), ".")),
+      h("li", null, h("b", null, "Глагол строится от формы «она/он/они». "), "Эта форма есть в карточке слова. Меняешь только хвост: ", gramTails("dirb{a} → dirb{u}", "lt"), ".")),
     h("div", { class: "gmap", role: "group", "aria-label": "Хвосты на примере двух слов" },
       row("кто?", "Мама, друг здесь", "Mam{a} čia", "Draug{as} čia"),
       row("кого?", "Вижу маму, друга", "Matau mam{ą}", "Matau draug{ą}"),
@@ -3084,6 +3107,27 @@ function viewGrammar(){
   S.session = null;
   return frag;
 }
+// One plain sentence about this exact word, not a general rule.
+const G_VERB_TAILS = { pres: { a: ["u", "i", "", "ame", "ate"], i: ["iu", "i", "", "ime", "ite"], o: ["au", "ai", "", "ome", "ote"] }, past: { o: ["au", "ai", "", "ome", "ote"], "ė": ["iau", "ei", "", "ėme", "ėte"] } };
+const G_WHO = ["«я»", "«ты»", "", "«мы»", "«вы»"];
+function gramWhy(t){
+  const L = t.L;
+  if (L.kind === "verb"){
+    const forms = verbForms(t.w)[L.tense], i = forms.indexOf(t.answer), p3 = forms[2], who = G_WHO[i];
+    if (L.tense === "fut") return `берём ${p3} и для ${who} добавляем хвост: ${t.answer}.`;
+    const end = p3.slice(-1), tail = G_VERB_TAILS[L.tense][end][i];
+    const soft = L.tense === "past" && tail === "iau" && /(č|dž)iau$/.test(t.answer) ? " Перед -iau t становится č, а d становится dž." : "";
+    return `${p3} кончается на -${end}, а у таких глаголов ${who} оканчивается на -${tail}.${soft}`;
+  }
+  if (L.kind === "adj"){
+    const forms = adjForms(t.w.de), key = Object.keys(forms).find(k => forms[k] === t.answer), isAcc = key.startsWith("acc");
+    const gender = forms.accM === forms.accF && isAcc ? "" : /M$/.test(key) ? "мужского рода" : "женского рода";
+    return `существительное рядом${gender ? " " + gender : ""}${isAcc ? (gender ? " и" : "") + " отвечает на ką?" : ""}, поэтому ${t.answer}.`;
+  }
+  const end = t.base.slice(t.stem.length), tail = gramSplit(t.answer, t.stem)[1];
+  const ask = L.key === "pl" ? "их много" : `вопрос ${G_ASK[L.key][0]} (${G_ASK[L.key][1]})`;
+  return `${ask}. ${t.base} кончается на -${end}, поэтому хвост -${tail}.`;
+}
 function gramFinish(s){
   if (s.saved) return; s.saved = true;
   if (s.lesson) gRecord(s.lesson.id, s.right >= G_PASS, s.right);
@@ -3122,7 +3166,7 @@ function viewGDrill(){
     const exact = norm(val) === norm(t.answer), loose = !exact && fold(val) === fold(t.answer) && !t.others.some(x => norm(x) === norm(val));
     st.close = loose; settle(exact || loose);
   };
-  const hintLine = L.kind === "verb" ? `он/она: ${verbForms(t.w)[L.tense][2]}` : null;
+  const hintLine = L.kind === "verb" ? `она/он/они: ${verbForms(t.w)[L.tense][2]}` : null;
   const askCase = t.type === "case";
   const qs = askCase ? "На какой вопрос отвечает слово?" : t.type === "tail" ? "Выбери форму" : "Напиши форму";
   const stage = h("div", { class: "stage" },
@@ -3130,6 +3174,17 @@ function viewGDrill(){
       h("div", { class: "qtype" }, qs),
       h("div", { class: askCase ? "ctx" : "ctx-ru" }, ...[].concat(gramSent(t.ru, "mark"))),
       askCase && !done ? null : h("div", { class: "ctx", lang: "lt", style: askCase ? null : "margin-top:10px" }, ...[].concat(gramSent(t.lt, done ? "fill" : "blank", t.stem)), done ? null : h("span", { class: "base" }, ` (${t.base}${hintLine ? " · " + hintLine : ""})`))));
+  // The rule on demand, inside the task. For "which case?" it lists the choices' triggers, since naming this lesson's rule would give the answer away.
+  const toggleHint = () => { const f = $("#gin"); if (f) st.value = f.value; st.hint = !st.hint; render(); };
+  if (!done){
+    stage.append(h("div", { class: "ghint-row" }, h("button", { type: "button", class: "btn ghost skip", "aria-expanded": String(!!st.hint), onclick: toggleHint }, st.hint ? "Скрыть подсказку" : "Подсказка", t.type === "type" ? null : [" ", h("span", { class: "kbd" }, "?")])));
+    if (st.hint){
+      const tableOf = G_TOPICS.find(x => x.id === L.id);
+      stage.append(askCase
+        ? h("div", { class: "ghint" }, ...t.cases.map(k => { const X = G_PATH.find(x => x.key === k && x.kind === "noun"); return h("p", null, h("b", { lang: "lt" }, G_ASK[k][0]), " — ", G_ASK[k][1], X ? `: ${X.why}` : ": кто или что само действует"); }))
+        : h("div", { class: "ghint" }, h("p", null, L.rule), L.trap ? h("p", null, h("b", null, "Не как в русском. "), L.trap) : null, tableOf ? h("details", { class: "gex" }, h("summary", null, "Таблица окончаний"), gramTable(tableOf.table)) : null));
+    }
+  }
   if (askCase){
     const choose = k => { if (done) return; st.choice = k; settle(k === L.key); };
     stage.append(h("div", { class: "options", role: "group", "aria-label": "Варианты ответа" }, ...t.cases.map((k, i) => h("button", { type: "button", class: "opt" + (done && k === L.key ? " right" : done && k === st.choice ? " wrong" : ""), disabled: done && k !== L.key && k !== st.choice ? true : null, onclick: () => choose(k) },
@@ -3143,17 +3198,18 @@ function viewGDrill(){
   } else {
     stage.append(h("form", { onsubmit: e => { e.preventDefault(); done ? next() : check(); } },
       h("input", { id: "gin", class: "field", lang: "lt", autocomplete: "off", autocapitalize: "off", spellcheck: "false", placeholder: "Форма по-литовски…", "aria-label": "Твой ответ по-литовски", value: st.value || "", readonly: done ? true : null }),
+      !done ? ltKeys("gin") : null,
       !done ? h("div", { class: "actions" }, h("button", { type: "button", class: "btn ghost", onclick: skip }, "Не знаю"), h("button", { type: "submit", class: "btn ink" }, "Проверить ", h("span", { class: "kbd" }, "Enter"))) : null));
     st.keys = null;
-    if (!done) requestAnimationFrame(() => { const f = $("#gin"); if (f) f.focus(); });
+    if (!done) requestAnimationFrame(() => { const f = $("#gin"); if (f){ f.focus(); f.setSelectionRange(f.value.length, f.value.length); } });
   }
-  if (!done && t.type !== "type"){ stage.append(h("div", { class: "skip-row" }, h("button", { type: "button", class: "btn ghost skip", onclick: skip }, "Не знаю ", h("span", { class: "kbd" }, "0")))); st.keys = Object.assign(st.keys || {}, { "0": skip }); }
+  if (!done && t.type !== "type"){ stage.append(h("div", { class: "skip-row" }, h("button", { type: "button", class: "btn ghost skip", onclick: skip }, "Не знаю ", h("span", { class: "kbd" }, "0")))); st.keys = Object.assign(st.keys || {}, { "0": skip, "?": toggleHint }); }
   if (done){
     const ok = st.result;
     stage.append(h("div", { class: "feedback " + (ok ? "ok" : "bad") },
       h("b", null, st.close ? "Верно, но проверь диакритику." : ok ? "Верно!" : st.skipped ? "Вот как правильно:" : "Не совсем."),
       h("p", { style: "margin:6px 0 0" }, h("span", { lang: "lt" }, t.base, " → "), gramForm(t.answer, t.stem), sayBtn(t.w, "w", "sm")),
-      h("p", { style: "margin:4px 0 0" }, "Почему так: ", L.why, "."),
+      h("p", { style: "margin:4px 0 0" }, "Почему так: ", gramWhy(t)),
       t.note ? h("p", { style: "margin:4px 0 0" }, h("b", null, "Не как в русском. "), t.note) : null));
     stage.append(h("div", { class: "actions next-row", style: "grid-template-columns:1fr" }, h("button", { type: "button", class: "btn ink", id: "gnext", onclick: next }, "Дальше ", h("span", { class: "kbd" }, "Enter"))));
     st.keys = { Enter: next };
